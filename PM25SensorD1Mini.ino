@@ -260,7 +260,7 @@ void loop() {
     message_string = String(g_pm10_latest_value);
     //Serial.println(message_string);
     message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
-    client.publish(g_pm10_mqtt_topic, g_mqtt_message_buffer);
+    client.publish(g_pm10_raw_mqtt_topic, g_mqtt_message_buffer);
   }
 }
 
