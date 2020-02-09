@@ -6,7 +6,7 @@ Mini (or other ESP8266-based board) and report the values to an MQTT
 broker and show them on a 128x32 OLED display.
 
 The mode button and OLED are optional. You can build this device with
-nothing but a PMS5003 and an D1 Mini, and it will work just fine.
+nothing but a PMS5003 and a D1 Mini, and it will work just fine.
 
 On startup, the device reads its own ESP8266 chip ID and uses this as the
 basis for its MQTT topics and client ID, to ensure that they will be
@@ -44,7 +44,7 @@ Dependencies
 ------------
 
 These dependencies can all be fulfilled in the Arduino IDE using
-Sketch -> Include Library -> Manage Libraries...
+"Sketch -> Include Library -> Manage Libraries..."
 
  * GFX library by Adafruit https://github.com/adafruit/Adafruit-GFX-Library
  * SSD1306 library by Adafruit https://github.com/adafruit/Adafruit_SSD1306
@@ -60,7 +60,7 @@ For particulate matter sensor:
  * PMS5003 TX to D1 Mini RX pin (via a switch or jumper)
 
 For mode button:
- * Button connected between D1 Mini D7 and GND
+ * Button connected between D1 Mini "D7" pin (GPIO13) and GND
 
  For 128x32 I2C OLED:
  * OLED VCC to D1 Mini 3.3V
