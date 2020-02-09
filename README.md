@@ -43,6 +43,9 @@ you can easily disable it whenever you want to upload new firmware.
 Dependencies
 ------------
 
+These dependencies can all be fulfilled in the Arduino IDE using
+Sketch -> Include Library -> Manage Libraries...
+
  * GFX library by Adafruit https://github.com/adafruit/Adafruit-GFX-Library
  * SSD1306 library by Adafruit https://github.com/adafruit/Adafruit_SSD1306
  * PMS library by Mariusz Kacki https://github.com/fu-hsi/pms
@@ -51,16 +54,19 @@ Dependencies
 Connections
 -----------
 
+For particulate matter sensor:
  * PMS5003 VCC to D1 Mini 5V
  * PMS5003 GND to D1 Mini GND
  * PMS5003 TX to D1 Mini RX pin (via a switch or jumper)
 
+For mode button:
  * Button connected between D1 Mini D7 and GND
 
- * 128x32 I2C OLED VCC to D1 Mini 3.3V
- * 128x32 I2C OLED GND to D1 Mini GND
- * 128x32 I2C OLED SCL to D1 Mini D1
- * 128x32 I2C OLED SDA to D1 Mini D2
+ For 128x32 I2C OLED:
+ * OLED VCC to D1 Mini 3.3V
+ * OLED GND to D1 Mini GND
+ * OLED SCL to D1 Mini D1
+ * OLED SDA to D1 Mini D2
 
 To do
 -----
