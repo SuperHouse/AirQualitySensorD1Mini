@@ -24,12 +24,13 @@
 
 /*--------------------------- Global Variables ---------------------------*/
 // Particulate matter sensor
+#define SAMPLE_COUNT 50                // Number of samples to average
 uint8_t g_pm1_latest_value   = 0;      // Latest pm1.0 reading from sensor
 uint8_t g_pm2p5_latest_value = 0;      // Latest pm2.5 reading from sensor
 uint8_t g_pm10_latest_value  = 0;      // Latest pm10.0 reading from sensor
-uint16_t g_pm1_ring_buffer[50];        // Ring buffer for averaging pm1.0 values
-uint16_t g_pm2p5_ring_buffer[50];      // Ring buffer for averaging pm2.5 values
-uint16_t g_pm10_ring_buffer[50];       // Ring buffer for averaging pm10.0 values
+uint16_t g_pm1_ring_buffer[SAMPLE_COUNT];   // Ring buffer for averaging pm1.0 values
+uint16_t g_pm2p5_ring_buffer[SAMPLE_COUNT]; // Ring buffer for averaging pm2.5 values
+uint16_t g_pm10_ring_buffer[SAMPLE_COUNT];  // Ring buffer for averaging pm10.0 values
 uint8_t  g_ring_buffer_index = 0;      // Current position in the ring buffers
 
 // MQTT
@@ -39,6 +40,8 @@ char g_mqtt_message_buffer[75];        // General purpose buffer for MQTT messag
 char g_pm1_mqtt_topic[50];             // MQTT topic for reporting averaged pm1.0 values
 char g_pm2p5_mqtt_topic[50];           // MQTT topic for reporting averaged pm2.5 values
 char g_pm10_mqtt_topic[50];            // MQTT topic for reporting averaged pm10.0 values
+char g_pm1_raw_mqtt_topic[50];         // MQTT topic for reporting raw pm1.0 values
+char g_pm2p5_raw_mqtt_topic[50];       // MQTT topic for reporting raw pm2.5 values
 char g_pm10_raw_mqtt_topic[50];        // MQTT topic for reporting raw pm10.0 values
 char g_command_topic[50];              // MQTT topic for receiving commands
 
@@ -100,6 +103,8 @@ void setup()   {
   sprintf(g_pm1_mqtt_topic,      "device/%x/pm1",     ESP.getChipId());  // From PMS
   sprintf(g_pm2p5_mqtt_topic,    "device/%x/pm2p5",   ESP.getChipId());  // From PMS
   sprintf(g_pm10_mqtt_topic,     "device/%x/pm10",    ESP.getChipId());  // From PMS
+  sprintf(g_pm1_raw_mqtt_topic, "device/%x/pm1raw", ESP.getChipId());  // From PMS
+  sprintf(g_pm2p5_raw_mqtt_topic, "device/%x/pm2p5raw", ESP.getChipId());  // From PMS
   sprintf(g_pm10_raw_mqtt_topic, "device/%x/pm10raw", ESP.getChipId());  // From PMS
   sprintf(g_command_topic,       "device/%x/command", ESP.getChipId());  // For receiving messages
 
@@ -156,7 +161,7 @@ void loop() {
     g_pm2p5_ring_buffer[g_ring_buffer_index] = g_pm2p5_latest_value;
     g_pm10_ring_buffer[g_ring_buffer_index]  = g_pm10_latest_value;
     g_ring_buffer_index++;
-    if (g_ring_buffer_index > 9)
+    if (g_ring_buffer_index > SAMPLE_COUNT)
     {
       g_ring_buffer_index = 0;
     }
@@ -224,19 +229,19 @@ void loop() {
     {
       pm1_average_value += g_pm1_ring_buffer[i];
     }
-    pm1_average_value = (int)(pm1_average_value / 50);
+    pm1_average_value = (int)(pm1_average_value / SAMPLE_COUNT);
 
     for (i = 0; i < sizeof(g_pm2p5_ring_buffer) / sizeof( g_pm2p5_ring_buffer[0]); i++)
     {
       pm2p5_average_value += g_pm2p5_ring_buffer[i];
     }
-    pm2p5_average_value = (int)(pm1_average_value / 50);
+    pm2p5_average_value = (int)(pm1_average_value / SAMPLE_COUNT);
 
     for (i = 0; i < sizeof(g_pm10_ring_buffer) / sizeof( g_pm10_ring_buffer[0]); i++)
     {
       pm10_average_value += g_pm10_ring_buffer[i];
     }
-    pm10_average_value = (int)(pm10_average_value / 50);
+    pm10_average_value = (int)(pm10_average_value / SAMPLE_COUNT);
 
     /* Report PM1 value */
     message_string = String(pm1_average_value);
@@ -255,6 +260,18 @@ void loop() {
     //Serial.println(message_string);
     message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
     client.publish(g_pm10_mqtt_topic, g_mqtt_message_buffer);
+
+    /* Report raw PM1 value for comparison with averaged value */
+    message_string = String(g_pm1_latest_value);
+    //Serial.println(message_string);
+    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    client.publish(g_pm1_raw_mqtt_topic, g_mqtt_message_buffer);
+
+    /* Report raw PM2.5 value for comparison with averaged value */
+    message_string = String(g_pm2p5_latest_value);
+    //Serial.println(message_string);
+    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    client.publish(g_pm2p5_raw_mqtt_topic, g_mqtt_message_buffer);
 
     /* Report raw PM10 value for comparison with averaged value */
     message_string = String(g_pm10_latest_value);
