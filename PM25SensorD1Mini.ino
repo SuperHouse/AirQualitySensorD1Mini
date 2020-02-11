@@ -235,7 +235,7 @@ void loop() {
     {
       pm2p5_average_value += g_pm2p5_ring_buffer[i];
     }
-    pm2p5_average_value = (int)(pm1_average_value / SAMPLE_COUNT);
+    pm2p5_average_value = (int)(pm2p5_average_value / SAMPLE_COUNT);
 
     for (i = 0; i < sizeof(g_pm10_ring_buffer) / sizeof( g_pm10_ring_buffer[0]); i++)
     {
