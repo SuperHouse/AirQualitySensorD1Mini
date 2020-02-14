@@ -229,19 +229,19 @@ void loop() {
     {
       pm1_average_value += g_pm1_ring_buffer[i];
     }
-    pm1_average_value = (int)(pm1_average_value / SAMPLE_COUNT);
+    pm1_average_value = (int)((pm1_average_value / SAMPLE_COUNT) + 0.5);
 
     for (i = 0; i < sizeof(g_pm2p5_ring_buffer) / sizeof( g_pm2p5_ring_buffer[0]); i++)
     {
       pm2p5_average_value += g_pm2p5_ring_buffer[i];
     }
-    pm2p5_average_value = (int)(pm2p5_average_value / SAMPLE_COUNT);
+    pm2p5_average_value = (int)((pm2p5_average_value / SAMPLE_COUNT) + 0.5);
 
     for (i = 0; i < sizeof(g_pm10_ring_buffer) / sizeof( g_pm10_ring_buffer[0]); i++)
     {
       pm10_average_value += g_pm10_ring_buffer[i];
     }
-    pm10_average_value = (int)(pm10_average_value / SAMPLE_COUNT);
+    pm10_average_value = (int)((pm10_average_value / SAMPLE_COUNT) + 0.5);
 
     /* Report PM1 value */
     message_string = String(pm1_average_value);
