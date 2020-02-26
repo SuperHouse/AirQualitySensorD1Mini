@@ -1,26 +1,32 @@
 /*
-  Particulate Matter Sensor firmware
+  Particulate Matter Sensor firmware (D1 Mini version)
 
   Read from a Plantower PMS5003 particulate matter sensor using a Wemos D1
   Mini (or other ESP8266-based board) and report the values to an MQTT
-  broker and show them on a 128x32 OLED display.
+  broker. Also optionally show them on a 128x32 OLED display.
 
   Written by Jonathan Oxer for www.superhouse.tv
    https://github.com/superhouse/PM25SensorD1Mini
+
+  Dependencies, all available in the Arduino library manager:
+     "Adafruit GFX Library" by Adafruit
+     "Adafruit SSD1306" by Adafruit
+     "PMS Library" by Mariusz Kacki
+     "PubSubClient" by Nick O'Leary
 
   Inspired by https://github.com/SwapBap/WemosDustSensor/blob/master/WemosDustSensor.ino
 */
 
 /*--------------------------- Configuration ------------------------------*/
-// Config values are changed by editing this file:
+// Configuration should be done in the included file:
 #include "config.h"
 
 /*--------------------------- Libraries ----------------------------------*/
-#include <Adafruit_GFX.h>      // Required for OLED
-#include <Adafruit_SSD1306.h>  // Required for OLED
-#include <ESP8266WiFi.h>       // ESP8266 WiFi driver
-#include "PMS.h"               // Particulate Matter Sensor driver
-#include <PubSubClient.h>      // Required for MQTT
+#include <Adafruit_GFX.h>              // Required for OLED
+#include <Adafruit_SSD1306.h>          // Required for OLED
+#include <ESP8266WiFi.h>               // ESP8266 WiFi driver
+#include "PMS.h"                       // Particulate Matter Sensor driver
+#include <PubSubClient.h>              // Required for MQTT
 
 /*--------------------------- Global Variables ---------------------------*/
 // Particulate matter sensor
@@ -32,6 +38,9 @@ uint16_t g_pm1_ring_buffer[SAMPLE_COUNT];   // Ring buffer for averaging pm1.0 v
 uint16_t g_pm2p5_ring_buffer[SAMPLE_COUNT]; // Ring buffer for averaging pm2.5 values
 uint16_t g_pm10_ring_buffer[SAMPLE_COUNT];  // Ring buffer for averaging pm10.0 values
 uint8_t  g_ring_buffer_index = 0;      // Current position in the ring buffers
+uint32_t g_pm1_average_value   = 0;    // Average pm1.0 reading from buffer
+uint32_t g_pm2p5_average_value = 0;    // Average pm2.5 reading from buffer
+uint32_t g_pm10_average_value  = 0;    // Average pm10.0 reading from buffer
 
 // MQTT
 String g_device_id = "default";        // This is replaced later with a unique value
@@ -55,11 +64,20 @@ uint8_t g_display_state = STATE_GRAMS; // Display values in grams by default
 uint8_t  g_current_mode_button_state  = 1;   // Pin is pulled high by default
 uint8_t  g_previous_mode_button_state = 1;
 uint32_t g_last_debounce_time         = 0;
-uint32_t g_debounce_delay             = 200;
+uint32_t g_debounce_delay             = 100;
 
 // Wifi
 #define WIFI_CONNECT_INTERVAL 500      // Wait 500ms intervals for wifi connection
 #define WIFI_CONNECT_MAX_ATTEMPTS 10   // Number of attempts/intervals to wait
+
+/*--------------------------- Function Signatures ---------------------------*/
+void mqttCallback(char* topic, byte* payload, uint8_t length);
+void checkModeButton();
+bool initWifi();
+void reconnectMqtt();
+void updatePmsReadings();
+void reportToMqtt();
+void renderScreen();
 
 /*--------------------------- Instantiate Global Objects --------------------*/
 // Particulate matter sensor
@@ -74,39 +92,18 @@ WiFiClient esp_client;
 PubSubClient client(esp_client);
 
 /*--------------------------- Program ---------------------------------------*/
-/*
-   This callback is invoked when an MQTT message is received. It's not important
-   right now for this project because we don't receive commands via MQTT. You
-   can modify this function to make the device act on commands that you send it.
-*/
-void callback(char* topic, byte* payload, uint8_t length) {
-  //Serial.print("Message arrived [");
-  //Serial.print(topic);
-  //Serial.print("] ");
-  //for (int i = 0; i < length; i++) {
-  //  Serial.print((char)payload[i]);
-  //}
-  //Serial.println();
-}
-
 /**
-   Setup
+  Setup
 */
 void setup()   {
+  Serial.begin(PMS_BAUD_RATE);   // GPIO1, GPIO3 (TX/RX pin on ESP-12E Development Board)
+  Serial.println();
+  Serial.println("Air Quality Sensor starting up (ESP8266 version)");
+
   // We need a unique device ID for our MQTT client connection
   g_device_id = String(ESP.getChipId(), HEX);  // Get the unique ID of the ESP8266 chip in hex
-  //Serial.print("Device ID: ");
-  //Serial.println(g_device_id);
-
-  // Set up the topics for publishing sensor readings. By inserting the unique ID,
-  // the result is of the form: "device/d9616f/pm1" etc
-  sprintf(g_pm1_mqtt_topic,      "device/%x/pm1",     ESP.getChipId());  // From PMS
-  sprintf(g_pm2p5_mqtt_topic,    "device/%x/pm2p5",   ESP.getChipId());  // From PMS
-  sprintf(g_pm10_mqtt_topic,     "device/%x/pm10",    ESP.getChipId());  // From PMS
-  sprintf(g_pm1_raw_mqtt_topic, "device/%x/pm1raw", ESP.getChipId());  // From PMS
-  sprintf(g_pm2p5_raw_mqtt_topic, "device/%x/pm2p5raw", ESP.getChipId());  // From PMS
-  sprintf(g_pm10_raw_mqtt_topic, "device/%x/pm10raw", ESP.getChipId());  // From PMS
-  sprintf(g_command_topic,       "device/%x/command", ESP.getChipId());  // For receiving messages
+  Serial.print("Device ID: ");
+  Serial.println(g_device_id);
 
   // Set up display
   OLED.begin();
@@ -119,6 +116,27 @@ void setup()   {
   OLED.println(g_device_id);
   OLED.display();
 
+  // Set up the topics for publishing sensor readings. By inserting the unique ID,
+  // the result is of the form: "device/d9616f/pm1" etc
+  sprintf(g_pm1_mqtt_topic,       "device/%x/pm1",      ESP.getChipId());  // Data from PMS
+  sprintf(g_pm2p5_mqtt_topic,     "device/%x/pm2p5",    ESP.getChipId());  // Data from PMS
+  sprintf(g_pm10_mqtt_topic,      "device/%x/pm10",     ESP.getChipId());  // Data from PMS
+  sprintf(g_pm1_raw_mqtt_topic,   "device/%x/pm1raw",   ESP.getChipId());  // Data from PMS
+  sprintf(g_pm2p5_raw_mqtt_topic, "device/%x/pm2p5raw", ESP.getChipId());  // Data from PMS
+  sprintf(g_pm10_raw_mqtt_topic,  "device/%x/pm10raw",  ESP.getChipId());  // Data from PMS
+  sprintf(g_command_topic,        "device/%x/command",  ESP.getChipId());  // For receiving commands
+
+  // Report the MQTT topics to the serial console
+  Serial.println("MQTT topics:");
+  Serial.println(g_pm1_mqtt_topic);         // From PMS
+  Serial.println(g_pm2p5_mqtt_topic);       // From PMS
+  Serial.println(g_pm10_mqtt_topic);        // From PMS
+  Serial.println(g_pm1_raw_mqtt_topic);     // From PMS
+  Serial.println(g_pm2p5_raw_mqtt_topic);   // From PMS
+  Serial.println(g_pm10_raw_mqtt_topic);    // From PMS
+
+  Serial.println(g_command_topic);          // For receiving messages
+
   // Connect to WiFi
   if (initWifi()) {
     OLED.println("Wifi [CONNECTED]");
@@ -128,17 +146,15 @@ void setup()   {
   OLED.display();
   delay(1000);
 
-  Serial.begin(9600);   // GPIO1, GPIO3 (TX/RX pin on ESP-12E Development Board)
-
-  pinMode( mode_button_pin , INPUT_PULLUP ); // Pin for switching screens button
+  pinMode(MODE_BUTTON_PIN , INPUT_PULLUP); // Pin for switching screens button
 
   /* Set up the MQTT client */
   client.setServer(mqtt_broker, 1883);
-  client.setCallback(callback);
+  client.setCallback(mqttCallback);
 }
 
 /**
-   Main loop
+  Main loop
 */
 void loop() {
   if (WiFi.status() == WL_CONNECTED)
@@ -149,8 +165,96 @@ void loop() {
   }
   client.loop();  // Process any outstanding MQTT messages
 
-  toggleDisplay();
+  checkModeButton();
+  updatePmsReadings();
+  renderScreen();
+  reportToMqtt();
+}
 
+/**
+  Render the correct screen based on the display state
+*/
+void renderScreen()
+{
+  OLED.clearDisplay();
+  OLED.setCursor(0, 0);
+
+  // Render our displays
+  switch (g_display_state) {
+    case STATE_GRAMS:
+      OLED.setTextWrap(false);
+      OLED.println("ug/m^3 (Atmos.)");
+      OLED.print("PM 1.0 (ug/m3): ");
+      OLED.println(data.PM_AE_UG_1_0);
+
+      OLED.print("PM 2.5 (ug/m3): ");
+      OLED.println(data.PM_AE_UG_2_5);
+
+      OLED.print("PM 10.0 (ug/m3): ");
+      OLED.println(data.PM_AE_UG_10_0);
+      break;
+
+    case STATE_INFO:
+      char mqtt_client_id[20];
+      sprintf(mqtt_client_id, "esp8266-%x", ESP.getChipId());
+      OLED.setTextWrap(false);
+      OLED.println(mqtt_client_id);
+      OLED.print("IP: ");
+      OLED.println(WiFi.localIP());
+      OLED.print("SSID: ");
+      OLED.println(ssid);
+      OLED.print("WiFi: ");
+      if (WiFi.status() == WL_CONNECTED)
+      {
+        OLED.println("Connected");
+      } else {
+        OLED.println("FAILED");
+      }
+      break;
+
+    /* Fallback helps with debugging if you call a state that isn't defined */
+    default:
+      OLED.println(g_display_state);
+      break;
+  }
+
+  OLED.display();
+}
+
+/**
+  Read the display mode button and switch the display mode if necessary
+*/
+void checkModeButton() {
+
+  g_previous_mode_button_state = g_current_mode_button_state;
+  g_current_mode_button_state = digitalRead(MODE_BUTTON_PIN);
+
+  // Check if button is now pressed and it was previously unpressed
+  if (g_current_mode_button_state == LOW && g_previous_mode_button_state == HIGH)
+  {
+    // We haven't waited long enough so ignore this press
+    if (millis() - g_last_debounce_time <= g_debounce_delay) {
+      return;
+    }
+    Serial.println("Button pressed");
+
+    // Increment display state
+    g_last_debounce_time = millis();
+    if (g_display_state >= NUM_OF_STATES) {
+      g_display_state = 1;
+      return;
+    } else {
+      g_display_state++;
+      return;
+    }
+  }
+}
+
+/**
+  Update particulate matter sensor values
+*/
+void updatePmsReadings()
+{
   if (pms.read(data))
   {
     g_pm1_latest_value   = data.PM_AE_UG_1_0;
@@ -165,98 +269,55 @@ void loop() {
     {
       g_ring_buffer_index = 0;
     }
-
-    OLED.clearDisplay();
-    OLED.setCursor(0, 0);
-
-    // Render our displays
-    switch (g_display_state) {
-      case STATE_GRAMS:
-        OLED.setTextWrap(false);
-        OLED.println("ug/m^3 (Atmos.)");
-        OLED.print("PM 1.0 (ug/m3): ");
-        OLED.println(data.PM_AE_UG_1_0);
-
-        OLED.print("PM 2.5 (ug/m3): ");
-        OLED.println(data.PM_AE_UG_2_5);
-
-        OLED.print("PM 10.0 (ug/m3): ");
-        OLED.println(data.PM_AE_UG_10_0);
-        break;
-
-      case STATE_INFO:
-        char mqtt_client_id[20];
-        sprintf(mqtt_client_id, "esp8266-%x", ESP.getChipId());
-        OLED.setTextWrap(false);
-        OLED.println(mqtt_client_id);
-        OLED.print("IP: ");
-        OLED.println(WiFi.localIP());
-        OLED.print("SSID: ");
-        OLED.println(ssid);
-        OLED.print("WiFi: ");
-        if (WiFi.status() == WL_CONNECTED)
-        {
-          OLED.println("Connected");
-        } else {
-          OLED.println("FAILED");
-        }
-        break;
-
-      /* Fallback helps with debugging if you call a state that isn't defined */
-      default:
-        OLED.println(g_display_state);
-        break;
-    }
-
-    OLED.display();
-    delay(0.25);
   }
+}
 
+/**
+  Report the most recent values to MQTT if enough time has passed
+*/
+void reportToMqtt()
+{
   uint32_t time_now = millis();
   if (time_now - g_last_report_time > (report_interval * 1000))
   {
     g_last_report_time = time_now;
+    
     // Generate averages for the samples in the ring buffers
-
     uint8_t i;
-    uint32_t pm1_average_value   = 0;
-    uint32_t pm2p5_average_value = 0;
-    uint32_t pm10_average_value  = 0;
-
-    String message_string;
-
     for (i = 0; i < sizeof(g_pm1_ring_buffer) / sizeof( g_pm1_ring_buffer[0]); i++)
     {
-      pm1_average_value += g_pm1_ring_buffer[i];
+      g_pm1_average_value += g_pm1_ring_buffer[i];
     }
-    pm1_average_value = (int)((pm1_average_value / SAMPLE_COUNT) + 0.5);
+    g_pm1_average_value = (int)((g_pm1_average_value / SAMPLE_COUNT) + 0.5);
 
     for (i = 0; i < sizeof(g_pm2p5_ring_buffer) / sizeof( g_pm2p5_ring_buffer[0]); i++)
     {
-      pm2p5_average_value += g_pm2p5_ring_buffer[i];
+      g_pm2p5_average_value += g_pm2p5_ring_buffer[i];
     }
-    pm2p5_average_value = (int)((pm2p5_average_value / SAMPLE_COUNT) + 0.5);
+    g_pm2p5_average_value = (int)((g_pm2p5_average_value / SAMPLE_COUNT) + 0.5);
 
     for (i = 0; i < sizeof(g_pm10_ring_buffer) / sizeof( g_pm10_ring_buffer[0]); i++)
     {
-      pm10_average_value += g_pm10_ring_buffer[i];
+      g_pm10_average_value += g_pm10_ring_buffer[i];
     }
-    pm10_average_value = (int)((pm10_average_value / SAMPLE_COUNT) + 0.5);
+    g_pm10_average_value = (int)((g_pm10_average_value / SAMPLE_COUNT) + 0.5);
 
-    /* Report PM1 value */
-    message_string = String(pm1_average_value);
+    String message_string;
+    
+    /* Report averaged PM1 value */
+    message_string = String(g_pm1_average_value);
     //Serial.println(message_string);
     message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
     client.publish(g_pm1_mqtt_topic, g_mqtt_message_buffer);
 
-    /* Report PM2.5 value */
-    message_string = String(pm2p5_average_value);
+    /* Report averaged PM2.5 value */
+    message_string = String(g_pm2p5_average_value);
     //Serial.println(message_string);
     message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
     client.publish(g_pm2p5_mqtt_topic, g_mqtt_message_buffer);
 
-    /* Report PM10 value */
-    message_string = String(pm10_average_value);
+    /* Report averaged PM10 value */
+    message_string = String(g_pm10_average_value);
     //Serial.println(message_string);
     message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
     client.publish(g_pm10_mqtt_topic, g_mqtt_message_buffer);
@@ -278,35 +339,6 @@ void loop() {
     //Serial.println(message_string);
     message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
     client.publish(g_pm10_raw_mqtt_topic, g_mqtt_message_buffer);
-  }
-}
-
-/**
-  Read the display mode button and switch the display mode if necessary
-*/
-void toggleDisplay() {
-
-  g_previous_mode_button_state = g_current_mode_button_state;
-  g_current_mode_button_state = digitalRead(mode_button_pin);
-
-  // Check if button is now pressed and it was previously unpressed
-  if (g_current_mode_button_state == LOW && g_previous_mode_button_state == HIGH)
-  {
-    // We haven't waited long enough so ignore this press
-    if (millis() - g_last_debounce_time <= g_debounce_delay) {
-      return;
-    }
-
-    // Increment display state
-    g_last_debounce_time = millis();
-    if (g_display_state >= NUM_OF_STATES) {
-      g_display_state = 1;
-      return;
-    }
-    else {
-      g_display_state++;
-      return;
-    }
   }
 }
 
@@ -369,4 +401,19 @@ void reconnectMqtt() {
       delay(5000);
     }
   }
+}
+
+/**
+  This callback is invoked when an MQTT message is received. It's not important
+  right now for this project because we don't receive commands via MQTT. You
+  can modify this function to make the device act on commands that you send it.
+*/
+void mqttCallback(char* topic, byte* payload, uint8_t length) {
+  //Serial.print("Message arrived [");
+  //Serial.print(topic);
+  //Serial.print("] ");
+  //for (int i = 0; i < length; i++) {
+  //  Serial.print((char)payload[i]);
+  //}
+  //Serial.println();
 }
