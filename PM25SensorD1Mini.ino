@@ -25,44 +25,47 @@
 #include "config.h"
 
 /*--------------------------- Libraries ----------------------------------*/
-#include <SoftwareSerial.h>            // Allows PMS to avoid the USB serial port
-#include <Adafruit_GFX.h>              // Required for OLED
-#include <Adafruit_SSD1306.h>          // Required for OLED
-#include <ESP8266WiFi.h>               // ESP8266 WiFi driver
-#include <PMS.h>                       // Particulate Matter Sensor driver
-#include <PubSubClient.h>              // Required for MQTT
+#include <SoftwareSerial.h>             // Allows PMS to avoid the USB serial port
+#include <Adafruit_GFX.h>               // Required for OLED
+#include <Adafruit_SSD1306.h>           // Required for OLED
+#include <ESP8266WiFi.h>                // ESP8266 WiFi driver
+#include <PMS.h>                        // Particulate Matter Sensor driver
+#include <PubSubClient.h>               // Required for MQTT
 
 /*--------------------------- Global Variables ---------------------------*/
 // Particulate matter sensor
-#define SAMPLE_COUNT 50                // Number of samples to average
-uint8_t g_pm1_latest_value   = 0;      // Latest pm1.0 reading from sensor
-uint8_t g_pm2p5_latest_value = 0;      // Latest pm2.5 reading from sensor
-uint8_t g_pm10_latest_value  = 0;      // Latest pm10.0 reading from sensor
+#define SAMPLE_COUNT 50                 // Number of samples to average
+uint8_t g_pm1_latest_value   = 0;       // Latest pm1.0 reading from sensor
+uint8_t g_pm2p5_latest_value = 0;       // Latest pm2.5 reading from sensor
+uint8_t g_pm10_latest_value  = 0;       // Latest pm10.0 reading from sensor
 uint16_t g_pm1_ring_buffer[SAMPLE_COUNT];   // Ring buffer for averaging pm1.0 values
 uint16_t g_pm2p5_ring_buffer[SAMPLE_COUNT]; // Ring buffer for averaging pm2.5 values
 uint16_t g_pm10_ring_buffer[SAMPLE_COUNT];  // Ring buffer for averaging pm10.0 values
-uint8_t  g_ring_buffer_index = 0;      // Current position in the ring buffers
-uint32_t g_pm1_average_value   = 0;    // Average pm1.0 reading from buffer
-uint32_t g_pm2p5_average_value = 0;    // Average pm2.5 reading from buffer
-uint32_t g_pm10_average_value  = 0;    // Average pm10.0 reading from buffer
+uint8_t  g_ring_buffer_index = 0;       // Current position in the ring buffers
+uint32_t g_pm1_average_value   = 0;     // Average pm1.0 reading from buffer
+uint32_t g_pm2p5_average_value = 0;     // Average pm2.5 reading from buffer
+uint32_t g_pm10_average_value  = 0;     // Average pm10.0 reading from buffer
 
 // MQTT
-String g_device_id = "default";        // This is replaced later with a unique value
-uint32_t g_last_report_time = 0;       // Timestamp of last report to MQTT
-char g_mqtt_message_buffer[75];        // General purpose buffer for MQTT messages
-char g_pm1_mqtt_topic[50];             // MQTT topic for reporting averaged pm1.0 values
-char g_pm2p5_mqtt_topic[50];           // MQTT topic for reporting averaged pm2.5 values
-char g_pm10_mqtt_topic[50];            // MQTT topic for reporting averaged pm10.0 values
-char g_pm1_raw_mqtt_topic[50];         // MQTT topic for reporting raw pm1.0 values
-char g_pm2p5_raw_mqtt_topic[50];       // MQTT topic for reporting raw pm2.5 values
-char g_pm10_raw_mqtt_topic[50];        // MQTT topic for reporting raw pm10.0 values
-char g_command_topic[50];              // MQTT topic for receiving commands
+String g_device_id = "default";         // This is replaced later with a unique value
+uint32_t g_last_mqtt_report_time = 0;   // Timestamp of last report to MQTT
+char g_mqtt_message_buffer[75];         // General purpose buffer for MQTT messages
+char g_pm1_mqtt_topic[50];              // MQTT topic for reporting averaged pm1.0 values
+char g_pm2p5_mqtt_topic[50];            // MQTT topic for reporting averaged pm2.5 values
+char g_pm10_mqtt_topic[50];             // MQTT topic for reporting averaged pm10.0 values
+char g_pm1_raw_mqtt_topic[50];          // MQTT topic for reporting raw pm1.0 values
+char g_pm2p5_raw_mqtt_topic[50];        // MQTT topic for reporting raw pm2.5 values
+char g_pm10_raw_mqtt_topic[50];         // MQTT topic for reporting raw pm10.0 values
+char g_command_topic[50];               // MQTT topic for receiving commands
+
+// Serial
+uint32_t g_last_serial_report_time = 0; // Timestamp of last report to serial console
 
 // OLED Display
-#define STATE_GRAMS   1                // Display PMS values in grams on screen
-#define STATE_INFO    2                // Display network status on screen
-#define NUM_OF_STATES 2                // Number of possible states
-uint8_t g_display_state = STATE_GRAMS; // Display values in grams by default
+#define STATE_GRAMS   1                 // Display PMS values in grams on screen
+#define STATE_INFO    2                 // Display network status on screen
+#define NUM_OF_STATES 2                 // Number of possible states
+uint8_t g_display_state = STATE_GRAMS;  // Display values in grams by default
 
 // Mode Button
 uint8_t  g_current_mode_button_state  = 1;   // Pin is pulled high by default
@@ -71,8 +74,8 @@ uint32_t g_last_debounce_time         = 0;
 uint32_t g_debounce_delay             = 100;
 
 // Wifi
-#define WIFI_CONNECT_INTERVAL 500      // Wait 500ms intervals for wifi connection
-#define WIFI_CONNECT_MAX_ATTEMPTS 10   // Number of attempts/intervals to wait
+#define WIFI_CONNECT_INTERVAL 500       // Wait 500ms intervals for wifi connection
+#define WIFI_CONNECT_MAX_ATTEMPTS 10    // Number of attempts/intervals to wait
 
 /*--------------------------- Function Signatures ---------------------------*/
 void mqttCallback(char* topic, byte* payload, uint8_t length);
@@ -85,14 +88,14 @@ void renderScreen();
 
 /*--------------------------- Instantiate Global Objects --------------------*/
 // Software serial port
-SoftwareSerial pmsSerial(D4, NULL);  // Rx pin = GPIO2 (D4 on Wemos D1 Mini)
+SoftwareSerial pmsSerial(D4, NULL);     // Rx pin = GPIO2 (D4 on Wemos D1 Mini)
 
 // Particulate matter sensor
-PMS pms(pmsSerial);
+PMS pms(pmsSerial);                     // Use the software serial port for the PMS
 PMS::DATA data;
 
 // OLED
-Adafruit_SSD1306 OLED(0);  // GPIO0 = OLED reset pin
+Adafruit_SSD1306 OLED(0);               // GPIO0 = OLED reset pin
 
 // MQTT
 WiFiClient esp_client;
@@ -102,7 +105,8 @@ PubSubClient client(esp_client);
 /**
   Setup
 */
-void setup()   {
+void setup()
+{
   Serial.begin(SERIAL_BAUD_RATE);   // GPIO1, GPIO3 (TX/RX pin on ESP-12E Development Board)
   Serial.println();
   Serial.println("Air Quality Sensor starting up, v2.1");
@@ -147,7 +151,8 @@ void setup()   {
   Serial.println(g_command_topic);          // For receiving messages
 
   // Connect to WiFi
-  if (initWifi()) {
+  if (initWifi())
+  {
     OLED.println("Wifi [CONNECTED]");
   } else {
     OLED.println("Wifi [FAILED]");
@@ -165,10 +170,12 @@ void setup()   {
 /**
   Main loop
 */
-void loop() {
+void loop()
+{
   if (WiFi.status() == WL_CONNECTED)
   {
-    if (!client.connected()) {
+    if (!client.connected())
+    {
       reconnectMqtt();
     }
   }
@@ -178,6 +185,8 @@ void loop() {
   updatePmsReadings();
   renderScreen();
   reportToMqtt();
+  reportToSerial();
+  updateAverages();
 }
 
 /**
@@ -189,7 +198,8 @@ void renderScreen()
   OLED.setCursor(0, 0);
 
   // Render our displays
-  switch (g_display_state) {
+  switch (g_display_state)
+  {
     case STATE_GRAMS:
       OLED.setTextWrap(false);
       OLED.println("ug/m^3 (Atmos.)");
@@ -233,8 +243,8 @@ void renderScreen()
 /**
   Read the display mode button and switch the display mode if necessary
 */
-void checkModeButton() {
-
+void checkModeButton()
+{
   g_previous_mode_button_state = g_current_mode_button_state;
   g_current_mode_button_state = digitalRead(MODE_BUTTON_PIN);
 
@@ -242,14 +252,16 @@ void checkModeButton() {
   if (g_current_mode_button_state == LOW && g_previous_mode_button_state == HIGH)
   {
     // We haven't waited long enough so ignore this press
-    if (millis() - g_last_debounce_time <= g_debounce_delay) {
+    if (millis() - g_last_debounce_time <= g_debounce_delay)
+    {
       return;
     }
     Serial.println("Button pressed");
 
     // Increment display state
     g_last_debounce_time = millis();
-    if (g_display_state >= NUM_OF_STATES) {
+    if (g_display_state >= NUM_OF_STATES)
+    {
       g_display_state = 1;
       return;
     } else {
@@ -282,34 +294,87 @@ void updatePmsReadings()
 }
 
 /**
+  Calculates averages for the samples in the ring buffers and stores them
+  in global variables for reference by the reporting functions.
+*/
+void updateAverages()
+{
+  uint8_t i;
+  for (i = 0; i < SAMPLE_COUNT; i++)
+  {
+    g_pm1_average_value += g_pm1_ring_buffer[i];
+  }
+  g_pm1_average_value = (int)((g_pm1_average_value / SAMPLE_COUNT) + 0.5);
+
+  for (i = 0; i < SAMPLE_COUNT; i++)
+  {
+    g_pm2p5_average_value += g_pm2p5_ring_buffer[i];
+  }
+  g_pm2p5_average_value = (int)((g_pm2p5_average_value / SAMPLE_COUNT) + 0.5);
+
+  //for (i = 0; i < sizeof(g_pm10_ring_buffer) / sizeof( g_pm10_ring_buffer[0]); i++)
+  for (i = 0; i < SAMPLE_COUNT; i++)
+  {
+    g_pm10_average_value += g_pm10_ring_buffer[i];
+  }
+  g_pm10_average_value = (int)((g_pm10_average_value / SAMPLE_COUNT) + 0.5);
+}
+
+/**
   Report the most recent values to MQTT if enough time has passed
 */
 void reportToMqtt()
 {
   uint32_t time_now = millis();
-  if (time_now - g_last_report_time > (telemetry_period * 1000))
+  if (time_now - g_last_mqtt_report_time > (mqtt_telemetry_period * 1000))
   {
-    g_last_report_time = time_now;
+    g_last_mqtt_report_time = time_now;
+    updateAverages();
 
-    // Generate averages for the samples in the ring buffers
-    uint8_t i;
-    for (i = 0; i < sizeof(g_pm1_ring_buffer) / sizeof( g_pm1_ring_buffer[0]); i++)
-    {
-      g_pm1_average_value += g_pm1_ring_buffer[i];
-    }
-    g_pm1_average_value = (int)((g_pm1_average_value / SAMPLE_COUNT) + 0.5);
+    String message_string;
 
-    for (i = 0; i < sizeof(g_pm2p5_ring_buffer) / sizeof( g_pm2p5_ring_buffer[0]); i++)
-    {
-      g_pm2p5_average_value += g_pm2p5_ring_buffer[i];
-    }
-    g_pm2p5_average_value = (int)((g_pm2p5_average_value / SAMPLE_COUNT) + 0.5);
+    /* Report averaged PM1 value */
+    message_string = String(g_pm1_average_value);
+    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    client.publish(g_pm1_mqtt_topic, g_mqtt_message_buffer);
 
-    for (i = 0; i < sizeof(g_pm10_ring_buffer) / sizeof( g_pm10_ring_buffer[0]); i++)
-    {
-      g_pm10_average_value += g_pm10_ring_buffer[i];
-    }
-    g_pm10_average_value = (int)((g_pm10_average_value / SAMPLE_COUNT) + 0.5);
+    /* Report averaged PM2.5 value */
+    message_string = String(g_pm2p5_average_value);
+    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    client.publish(g_pm2p5_mqtt_topic, g_mqtt_message_buffer);
+
+    /* Report averaged PM10 value */
+    message_string = String(g_pm10_average_value);
+    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    client.publish(g_pm10_mqtt_topic, g_mqtt_message_buffer);
+
+    /* Report raw PM1 value for comparison with averaged value */
+    message_string = String(g_pm1_latest_value);
+    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    client.publish(g_pm1_raw_mqtt_topic, g_mqtt_message_buffer);
+
+    /* Report raw PM2.5 value for comparison with averaged value */
+    message_string = String(g_pm2p5_latest_value);
+    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    client.publish(g_pm2p5_raw_mqtt_topic, g_mqtt_message_buffer);
+
+    /* Report raw PM10 value for comparison with averaged value */
+    message_string = String(g_pm10_latest_value);
+    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    client.publish(g_pm10_raw_mqtt_topic, g_mqtt_message_buffer);
+  }
+}
+
+/**
+  Report the most recent values to the serial console if enough time has passed
+*/
+void reportToSerial()
+{
+  uint32_t time_now = millis();
+  if (time_now - g_last_serial_report_time > (serial_telemetry_period * 1000))
+  {
+    g_last_serial_report_time = time_now;
+    updateAverages();
 
     String message_string;
 
@@ -317,64 +382,49 @@ void reportToMqtt()
     message_string = String(g_pm1_average_value);
     Serial.print("PM1_AVERAGE:");
     Serial.println(message_string);
-    //Serial.println(message_string);
-    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
-    client.publish(g_pm1_mqtt_topic, g_mqtt_message_buffer);
 
     /* Report averaged PM2.5 value */
     message_string = String(g_pm2p5_average_value);
     Serial.print("PM2P5_AVERAGE:");
     Serial.println(message_string);
-    //Serial.println(message_string);
-    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
-    client.publish(g_pm2p5_mqtt_topic, g_mqtt_message_buffer);
 
     /* Report averaged PM10 value */
     message_string = String(g_pm10_average_value);
     Serial.print("PM10_AVERAGE:");
     Serial.println(message_string);
-    //Serial.println(message_string);
-    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
-    client.publish(g_pm10_mqtt_topic, g_mqtt_message_buffer);
 
     /* Report raw PM1 value for comparison with averaged value */
     message_string = String(g_pm1_latest_value);
     Serial.print("PM1_LATEST:");
     Serial.println(message_string);
-    //Serial.println(message_string);
-    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
-    client.publish(g_pm1_raw_mqtt_topic, g_mqtt_message_buffer);
 
     /* Report raw PM2.5 value for comparison with averaged value */
     message_string = String(g_pm2p5_latest_value);
     Serial.print("PM2P5_LATEST:");
     Serial.println(message_string);
-    //Serial.println(message_string);
-    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
-    client.publish(g_pm2p5_raw_mqtt_topic, g_mqtt_message_buffer);
 
     /* Report raw PM10 value for comparison with averaged value */
     message_string = String(g_pm10_latest_value);
     Serial.print("PM10_LATEST:");
     Serial.println(message_string);
-    //Serial.println(message_string);
-    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
-    client.publish(g_pm10_raw_mqtt_topic, g_mqtt_message_buffer);
   }
 }
 
 /**
   Connect to Wifi. Returns false if it can't connect.
 */
-bool initWifi() {
+bool initWifi()
+{
   // Clean up any old auto-connections
-  if (WiFi.status() == WL_CONNECTED) {
+  if (WiFi.status() == WL_CONNECTED)
+  {
     WiFi.disconnect();
   }
   WiFi.setAutoConnect(false);
 
   // RETURN: No SSID, so no wifi!
-  if (sizeof(ssid) == 1) {
+  if (sizeof(ssid) == 1)
+  {
     return false;
   }
 
@@ -389,7 +439,8 @@ bool initWifi() {
     num_attempts++;
   }
 
-  if (WiFi.status() != WL_CONNECTED) {
+  if (WiFi.status() != WL_CONNECTED)
+  {
     return false;
   } else {
     return true;
@@ -404,10 +455,12 @@ void reconnectMqtt() {
   sprintf(mqtt_client_id, "esp8266-%x", ESP.getChipId());
 
   // Loop until we're reconnected
-  while (!client.connected()) {
+  while (!client.connected())
+  {
     //Serial.print("Attempting MQTT connection...");
     // Attempt to connect
-    if (client.connect(mqtt_client_id)) {
+    if (client.connect(mqtt_client_id))
+    {
       //Serial.println("connected");
       // Once connected, publish an announcement
       sprintf(g_mqtt_message_buffer, "Device %s starting up", mqtt_client_id);
@@ -429,7 +482,8 @@ void reconnectMqtt() {
   right now for this project because we don't receive commands via MQTT. You
   can modify this function to make the device act on commands that you send it.
 */
-void mqttCallback(char* topic, byte* payload, uint8_t length) {
+void mqttCallback(char* topic, byte* payload, uint8_t length)
+{
   //Serial.print("Message arrived [");
   //Serial.print(topic);
   //Serial.print("] ");
