@@ -13,9 +13,10 @@ basis for its MQTT topics and client ID, to ensure that they will be
 unique for each device.
 
 It displays this ID on the OLED display so you can read it off the
-display if you have one installed. In case you don't, it also publishes
-a startup message to the topic "events" including its own ID. You can
-watch that topic while the device is booting to see what ID it reports.
+display if you have one installed. In case you don't, it also reports
+the ID via the serial console at 9600bps, and publishes a startup
+message to the topic "events" including its own ID. You can watch that
+topic while the device is booting to see what ID it reports.
 
 This ID is then used to generate topics for it to report its readings.
 The topics take the following form, with its unique ID substituted:
@@ -23,10 +24,12 @@ The topics take the following form, with its unique ID substituted:
  * device/d9616f/pm1
  * device/d9616f/pm2p5
  * device/d9616f/pm10
+ * device/d9616f/pm1raw
+ * device/d9616f/pm2p5raw
  * device/d9616f/pm10raw
 
 The main topics report a rolling average of the last 50 readings from the
-sensor. The "...raw" topic shows the most recent reading. The PMS5003
+sensor. The "...raw" topics show the most recent reading. The PMS5003
 usually reports at 10 Hz, so these values can change rapidly.
 
 If you install the OLED and the mode button, you can use the button to
@@ -34,11 +37,6 @@ toggle the display between different screens. The default screen shows the
 most recent PMS values (updated multiple times per second) and the second
 screen shows network information including the MQTT ID, IP address, WiFi
 SSID, and WiFi connection status.
-
-When the TX output from the PMS5003 is connected to the RX pin on the D1
-Mini, it blocks the D1 Mini from communicating via USB. This includes
-updating the firmware! Use a switch or jumper to make this link, so that
-you can easily disable it whenever you want to upload new firmware.
 
 Dependencies
 ------------
@@ -55,18 +53,18 @@ Connections
 -----------
 
 For particulate matter sensor:
- * PMS5003 VCC to D1 Mini 5V
- * PMS5003 GND to D1 Mini GND
- * PMS5003 TX to D1 Mini RX pin (via a switch or jumper)
+ * PMS5003 pin 1 (VCC) to D1 Mini "5V" pin
+ * PMS5003 pin 2 (GND) to D1 Mini "GND" pin
+ * PMS5003 pin 5 (TX) to D1 Mini "D4" pin
 
 For mode button:
  * Button connected between D1 Mini "D7" pin (GPIO13) and GND
 
- For 128x32 I2C OLED:
+For 128x32 I2C OLED:
  * OLED VCC to D1 Mini 3.3V
  * OLED GND to D1 Mini GND
- * OLED SCL to D1 Mini D1
- * OLED SDA to D1 Mini D2
+ * OLED SCL to D1 Mini "D1" pin
+ * OLED SDA to D1 Mini "D2" pin
 
 To do
 -----
@@ -76,7 +74,6 @@ To do
      network info if possible, and an error message on grams screen.
  * Ignore all PMS values for 30 seconds after booting, to give the sensor
      time to settle.
- * Make ring buffer size configurable.
 
 Credits
 -------

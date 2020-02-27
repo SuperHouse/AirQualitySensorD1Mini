@@ -4,9 +4,11 @@ const char* ssid     = "YOUR SSID";          // Your WiFi SSID
 const char* password = "YOUR PSK";           // Your WiFi password
 
 /* MQTT */
-const char* mqtt_broker  = "192.168.1.111";  // IP address of your MQTT broker
-const char* statusTopic  = "events";         // MQTT topic to report startup
-uint32_t report_interval = 120;              // Report interval in seconds
+const char* mqtt_broker   = "192.168.1.111";  // IP address of your MQTT broker
+const char* statusTopic   = "events";         // MQTT topic to report startup
+uint32_t telemetry_period = 120;              // Report interval in seconds
+
+#define SERIAL_BAUD_RATE 9600
 
 /* ----------------- Hardware-specific Config ---------------------- */
 /* Mode button (momentary between this pin and GND) */
