@@ -1,20 +1,23 @@
-/*
-  Particulate Matter Sensor firmware (D1 Mini version)
+/**
+  Particulate matter sensor firmware for D1 Mini / ESP8266
+  Version: 2.1
+
+  By Jonathan Oxer for www.superhouse.tv
 
   Read from a Plantower PMS5003 particulate matter sensor using a Wemos D1
   Mini (or other ESP8266-based board) and report the values to an MQTT
-  broker. Also optionally show them on a 128x32 OLED display.
+  broker and to the serial console. Also optionally show them on a 128x32
+  I2C OLED display, with a mode button to change between display modes.
 
-  Written by Jonathan Oxer for www.superhouse.tv
-   https://github.com/superhouse/PM25SensorD1Mini
-
-  Dependencies, all available in the Arduino library manager:
+  External dependencies, all available in the Arduino library manager:
      "Adafruit GFX Library" by Adafruit
      "Adafruit SSD1306" by Adafruit
      "PMS Library" by Mariusz Kacki
      "PubSubClient" by Nick O'Leary
 
-  Inspired by https://github.com/SwapBap/WemosDustSensor/blob/master/WemosDustSensor.ino
+  More information: https://github.com/superhouse/PM25SensorD1Mini
+
+  Inspired by: https://github.com/SwapBap/WemosDustSensor/
 */
 
 /*--------------------------- Configuration ------------------------------*/
@@ -22,10 +25,11 @@
 #include "config.h"
 
 /*--------------------------- Libraries ----------------------------------*/
+#include <SoftwareSerial.h>            // Allows PMS to avoid the USB serial port
 #include <Adafruit_GFX.h>              // Required for OLED
 #include <Adafruit_SSD1306.h>          // Required for OLED
 #include <ESP8266WiFi.h>               // ESP8266 WiFi driver
-#include "PMS.h"                       // Particulate Matter Sensor driver
+#include <PMS.h>                       // Particulate Matter Sensor driver
 #include <PubSubClient.h>              // Required for MQTT
 
 /*--------------------------- Global Variables ---------------------------*/
@@ -80,8 +84,11 @@ void reportToMqtt();
 void renderScreen();
 
 /*--------------------------- Instantiate Global Objects --------------------*/
+// Software serial port
+SoftwareSerial pmsSerial(D4, NULL);  // Rx pin = GPIO2 (D4 on Wemos D1 Mini)
+
 // Particulate matter sensor
-PMS pms(Serial);
+PMS pms(pmsSerial);
 PMS::DATA data;
 
 // OLED
@@ -96,9 +103,11 @@ PubSubClient client(esp_client);
   Setup
 */
 void setup()   {
-  Serial.begin(PMS_BAUD_RATE);   // GPIO1, GPIO3 (TX/RX pin on ESP-12E Development Board)
+  Serial.begin(SERIAL_BAUD_RATE);   // GPIO1, GPIO3 (TX/RX pin on ESP-12E Development Board)
   Serial.println();
-  Serial.println("Air Quality Sensor starting up (ESP8266 version)");
+  Serial.println("Air Quality Sensor starting up, v2.1");
+
+  pmsSerial.begin(PMS_BAUD_RATE);   // Connection for PMS5003
 
   // We need a unique device ID for our MQTT client connection
   g_device_id = String(ESP.getChipId(), HEX);  // Get the unique ID of the ESP8266 chip in hex
@@ -212,7 +221,7 @@ void renderScreen()
       }
       break;
 
-    /* Fallback helps with debugging if you call a state that isn't defined */
+    /* This fallback helps with debugging if you call a state that isn't defined */
     default:
       OLED.println(g_display_state);
       break;
@@ -278,10 +287,10 @@ void updatePmsReadings()
 void reportToMqtt()
 {
   uint32_t time_now = millis();
-  if (time_now - g_last_report_time > (report_interval * 1000))
+  if (time_now - g_last_report_time > (telemetry_period * 1000))
   {
     g_last_report_time = time_now;
-    
+
     // Generate averages for the samples in the ring buffers
     uint8_t i;
     for (i = 0; i < sizeof(g_pm1_ring_buffer) / sizeof( g_pm1_ring_buffer[0]); i++)
@@ -303,39 +312,51 @@ void reportToMqtt()
     g_pm10_average_value = (int)((g_pm10_average_value / SAMPLE_COUNT) + 0.5);
 
     String message_string;
-    
+
     /* Report averaged PM1 value */
     message_string = String(g_pm1_average_value);
+    Serial.print("PM1_AVERAGE:");
+    Serial.println(message_string);
     //Serial.println(message_string);
     message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
     client.publish(g_pm1_mqtt_topic, g_mqtt_message_buffer);
 
     /* Report averaged PM2.5 value */
     message_string = String(g_pm2p5_average_value);
+    Serial.print("PM2P5_AVERAGE:");
+    Serial.println(message_string);
     //Serial.println(message_string);
     message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
     client.publish(g_pm2p5_mqtt_topic, g_mqtt_message_buffer);
 
     /* Report averaged PM10 value */
     message_string = String(g_pm10_average_value);
+    Serial.print("PM10_AVERAGE:");
+    Serial.println(message_string);
     //Serial.println(message_string);
     message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
     client.publish(g_pm10_mqtt_topic, g_mqtt_message_buffer);
 
     /* Report raw PM1 value for comparison with averaged value */
     message_string = String(g_pm1_latest_value);
+    Serial.print("PM1_LATEST:");
+    Serial.println(message_string);
     //Serial.println(message_string);
     message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
     client.publish(g_pm1_raw_mqtt_topic, g_mqtt_message_buffer);
 
     /* Report raw PM2.5 value for comparison with averaged value */
     message_string = String(g_pm2p5_latest_value);
+    Serial.print("PM2P5_LATEST:");
+    Serial.println(message_string);
     //Serial.println(message_string);
     message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
     client.publish(g_pm2p5_raw_mqtt_topic, g_mqtt_message_buffer);
 
     /* Report raw PM10 value for comparison with averaged value */
     message_string = String(g_pm10_latest_value);
+    Serial.print("PM10_LATEST:");
+    Serial.println(message_string);
     //Serial.println(message_string);
     message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
     client.publish(g_pm10_raw_mqtt_topic, g_mqtt_message_buffer);
