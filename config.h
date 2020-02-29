@@ -14,5 +14,5 @@ uint32_t    serial_telemetry_period = 10;              // Serial report interval
 
 
 /* ----------------- Hardware-specific config ---------------------- */
-#define     MODE_BUTTON_PIN           D7               // Pushbutton to GND
+#define     MODE_BUTTON_PIN           D3               // GPIO0 Pushbutton to GND
 #define     PMS_BAUD_RATE             9600             // PMS5003 uses 9600bps
