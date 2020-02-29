@@ -125,7 +125,10 @@ void setup()
   OLED.setTextSize(1);
   OLED.setTextColor(WHITE);
   OLED.setCursor(0, 0);
-  OLED.println("Booting...");
+  OLED.println(" www.superhouse.tv");
+  OLED.println(" Particulate Matter");
+  OLED.println(" Sensor v2.1");
+  OLED.print  (" Device id: ");
   OLED.println(g_device_id);
   OLED.display();
 
@@ -202,24 +205,29 @@ void renderScreen()
   {
     case STATE_GRAMS:
       OLED.setTextWrap(false);
-      OLED.println("ug/m^3 (Atmos.)");
-      OLED.print("PM 1.0 (ug/m3): ");
+      OLED.println("  Particles ug/m^3");
+      OLED.print("     PM  1.0: ");
       OLED.println(data.PM_AE_UG_1_0);
+      //OLED.println("ug/m3");
 
-      OLED.print("PM 2.5 (ug/m3): ");
+      OLED.print("     PM  2.5: ");
       OLED.println(data.PM_AE_UG_2_5);
+      //OLED.println("ug/m3");
 
-      OLED.print("PM 10.0 (ug/m3): ");
+      OLED.print("     PM 10.0: ");
       OLED.println(data.PM_AE_UG_10_0);
+      //OLED.println("ug/m3");
+      
       break;
 
     case STATE_INFO:
+      OLED.print("IP:   ");
+      OLED.println(WiFi.localIP());
       char mqtt_client_id[20];
       sprintf(mqtt_client_id, "esp8266-%x", ESP.getChipId());
       OLED.setTextWrap(false);
+      OLED.print("ID:   ");
       OLED.println(mqtt_client_id);
-      OLED.print("IP: ");
-      OLED.println(WiFi.localIP());
       OLED.print("SSID: ");
       OLED.println(ssid);
       OLED.print("WiFi: ");
