@@ -5,6 +5,8 @@ const char* password = "YOUR PSK";     // Your WiFi password
 
 /* MQTT */
 const char* mqtt_broker             = "192.168.1.111"; // IP address of your MQTT broker
+#define     REPORT_MQTT_TOPICS      true               // Report single values to individual topics
+#define     REPORT_MQTT_JSON        true               // Report all values in a JSON message
 uint32_t    mqtt_telemetry_period   = 120;             // MQTT report interval in seconds
 const char* statusTopic             = "events";        // MQTT topic to report startup
 
