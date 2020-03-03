@@ -50,13 +50,18 @@ uint32_t g_pm10_average_value  = 0;     // Average pm10.0 reading from buffer
 String g_device_id = "default";         // This is replaced later with a unique value
 uint32_t g_last_mqtt_report_time = 0;   // Timestamp of last report to MQTT
 char g_mqtt_message_buffer[75];         // General purpose buffer for MQTT messages
+char g_command_topic[50];               // MQTT topic for receiving commands
+#if REPORT_MQTT_TOPICS
 char g_pm1_mqtt_topic[50];              // MQTT topic for reporting averaged pm1.0 values
 char g_pm2p5_mqtt_topic[50];            // MQTT topic for reporting averaged pm2.5 values
 char g_pm10_mqtt_topic[50];             // MQTT topic for reporting averaged pm10.0 values
 char g_pm1_raw_mqtt_topic[50];          // MQTT topic for reporting raw pm1.0 values
 char g_pm2p5_raw_mqtt_topic[50];        // MQTT topic for reporting raw pm2.5 values
 char g_pm10_raw_mqtt_topic[50];         // MQTT topic for reporting raw pm10.0 values
-char g_command_topic[50];               // MQTT topic for receiving commands
+#endif
+#if REPORT_MQTT_JSON
+char g_mqtt_json_topic[50];             // MQTT topic for reporting all values in JSON
+#endif
 
 // Serial
 uint32_t g_last_serial_report_time = 0; // Timestamp of last report to serial console
@@ -134,15 +139,22 @@ void setup()
 
   // Set up the topics for publishing sensor readings. By inserting the unique ID,
   // the result is of the form: "device/d9616f/pm1" etc
+  sprintf(g_command_topic,        "device/%x/command",  ESP.getChipId());  // For receiving commands
+#if REPORT_MQTT_TOPICS
   sprintf(g_pm1_mqtt_topic,       "device/%x/pm1",      ESP.getChipId());  // Data from PMS
   sprintf(g_pm2p5_mqtt_topic,     "device/%x/pm2p5",    ESP.getChipId());  // Data from PMS
   sprintf(g_pm10_mqtt_topic,      "device/%x/pm10",     ESP.getChipId());  // Data from PMS
   sprintf(g_pm1_raw_mqtt_topic,   "device/%x/pm1raw",   ESP.getChipId());  // Data from PMS
   sprintf(g_pm2p5_raw_mqtt_topic, "device/%x/pm2p5raw", ESP.getChipId());  // Data from PMS
   sprintf(g_pm10_raw_mqtt_topic,  "device/%x/pm10raw",  ESP.getChipId());  // Data from PMS
-  sprintf(g_command_topic,        "device/%x/command",  ESP.getChipId());  // For receiving commands
+#endif
+#if REPORT_MQTT_JSON
+  sprintf(g_mqtt_json_topic,      "device/%x/status",   ESP.getChipId());  // Data from PMS
+#endif
 
   // Report the MQTT topics to the serial console
+  Serial.println(g_command_topic);          // For receiving messages
+#if REPORT_MQTT_TOPICS
   Serial.println("MQTT topics:");
   Serial.println(g_pm1_mqtt_topic);         // From PMS
   Serial.println(g_pm2p5_mqtt_topic);       // From PMS
@@ -150,8 +162,10 @@ void setup()
   Serial.println(g_pm1_raw_mqtt_topic);     // From PMS
   Serial.println(g_pm2p5_raw_mqtt_topic);   // From PMS
   Serial.println(g_pm10_raw_mqtt_topic);    // From PMS
-
-  Serial.println(g_command_topic);          // For receiving messages
+#endif
+#if REPORT_MQTT_JSON
+  Serial.println(g_mqtt_json_topic);        // From PMS
+#endif
 
   // Connect to WiFi
   if (initWifi())
@@ -217,7 +231,7 @@ void renderScreen()
       OLED.print("     PM 10.0: ");
       OLED.println(data.PM_AE_UG_10_0);
       //OLED.println("ug/m3");
-      
+
       break;
 
     case STATE_INFO:
@@ -341,6 +355,7 @@ void reportToMqtt()
 
     String message_string;
 
+#if REPORT_MQTT_TOPICS
     /* Report averaged PM1 value */
     message_string = String(g_pm1_average_value);
     message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
@@ -370,6 +385,17 @@ void reportToMqtt()
     message_string = String(g_pm10_latest_value);
     message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
     client.publish(g_pm10_raw_mqtt_topic, g_mqtt_message_buffer);
+#endif
+#if REPORT_MQTT_JSON
+    /* Report all values combined into one JSON message */
+    //message_string = String(g_pm10_latest_value);
+    //message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    //client.publish(g_mqtt_json_topic, g_mqtt_message_buffer);
+    //ResponseAppend_P(PSTR(",\"PMS5003\":{\"CF1\":%d,\"CF2.5\":%d,\"CF10\":%d,\"PM1\":%d,\"PM2.5\":%d,\"PM10\":%d,\"PB0.3\":%d,\"PB0.5\":%d,\"PB1\":%d,\"PB2.5\":%d,\"PB5\":%d,\"PB10\":%d}"),
+    //    pms_data.pm10_standard, pms_data.pm25_standard, pms_data.pm100_standard,
+    //    pms_data.pm10_env, pms_data.pm25_env, pms_data.pm100_env,
+    //    pms_data.particles_03um, pms_data.particles_05um, pms_data.particles_10um, pms_data.particles_25um, pms_data.particles_50um, pms_data.particles_100um);
+#endif
   }
 }
 
