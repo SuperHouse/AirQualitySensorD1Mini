@@ -49,7 +49,7 @@ uint32_t g_pm10_average_value  = 0;     // Average pm10.0 reading from buffer
 // MQTT
 String g_device_id = "default";         // This is replaced later with a unique value
 uint32_t g_last_mqtt_report_time = 0;   // Timestamp of last report to MQTT
-char g_mqtt_message_buffer[75];         // General purpose buffer for MQTT messages
+char g_mqtt_message_buffer[150];        // General purpose buffer for MQTT messages
 char g_command_topic[50];               // MQTT topic for receiving commands
 #if REPORT_MQTT_TOPICS
 char g_pm1_mqtt_topic[50];              // MQTT topic for reporting averaged pm1.0 values
@@ -139,17 +139,17 @@ void setup()
 
   // Set up the topics for publishing sensor readings. By inserting the unique ID,
   // the result is of the form: "device/d9616f/pm1" etc
-  sprintf(g_command_topic,        "device/%x/command",  ESP.getChipId());  // For receiving commands
+  sprintf(g_command_topic,        "cmnd/%x/COMMAND",  ESP.getChipId());  // For receiving commands
 #if REPORT_MQTT_TOPICS
-  sprintf(g_pm1_mqtt_topic,       "device/%x/pm1",      ESP.getChipId());  // Data from PMS
-  sprintf(g_pm2p5_mqtt_topic,     "device/%x/pm2p5",    ESP.getChipId());  // Data from PMS
-  sprintf(g_pm10_mqtt_topic,      "device/%x/pm10",     ESP.getChipId());  // Data from PMS
-  sprintf(g_pm1_raw_mqtt_topic,   "device/%x/pm1raw",   ESP.getChipId());  // Data from PMS
-  sprintf(g_pm2p5_raw_mqtt_topic, "device/%x/pm2p5raw", ESP.getChipId());  // Data from PMS
-  sprintf(g_pm10_raw_mqtt_topic,  "device/%x/pm10raw",  ESP.getChipId());  // Data from PMS
+  sprintf(g_pm1_mqtt_topic,       "tele/%x/PM1",      ESP.getChipId());  // Data from PMS
+  sprintf(g_pm2p5_mqtt_topic,     "tele/%x/PM2P5",    ESP.getChipId());  // Data from PMS
+  sprintf(g_pm10_mqtt_topic,      "tele/%x/PM10",     ESP.getChipId());  // Data from PMS
+  sprintf(g_pm1_raw_mqtt_topic,   "tele/%x/PM1RAW",   ESP.getChipId());  // Data from PMS
+  sprintf(g_pm2p5_raw_mqtt_topic, "tele/%x/PM2P5RAW", ESP.getChipId());  // Data from PMS
+  sprintf(g_pm10_raw_mqtt_topic,  "tele/%x/PM10RAW",  ESP.getChipId());  // Data from PMS
 #endif
 #if REPORT_MQTT_JSON
-  sprintf(g_mqtt_json_topic,      "device/%x/status",   ESP.getChipId());  // Data from PMS
+  sprintf(g_mqtt_json_topic,      "tele/%x/SENSOR",   ESP.getChipId());  // Data from PMS
 #endif
 
   // Report the MQTT topics to the serial console
@@ -391,6 +391,10 @@ void reportToMqtt()
     //message_string = String(g_pm10_latest_value);
     //message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
     //client.publish(g_mqtt_json_topic, g_mqtt_message_buffer);
+    // {"Time":"2020-02-27T03:27:22","PMS5003":{"CF1":0,"CF2.5":1,"CF10":1,"PM1":0,"PM2.5":1,"PM10":1,"PB0.3":0,"PB0.5":0,"PB1":0,"PB2.5":0,"PB5":0,"PB10":0}}
+    sprintf(g_mqtt_message_buffer,  "{\"PMS5003\":{\"CF1\":0,\"CF2.5\":0,\"CF10\":0,\"PM1\":%i,\"PM2.5\":%i,\"PM10\":%i,\"PB0.3\":0,\"PB0.5\":0,\"PB1\":0,\"PB2.5\":0,\"PB5\":0,\"PB10\":0}}",
+        g_pm1_latest_value, g_pm2p5_latest_value, g_pm10_latest_value);
+    client.publish(g_mqtt_json_topic, g_mqtt_message_buffer);
     //ResponseAppend_P(PSTR(",\"PMS5003\":{\"CF1\":%d,\"CF2.5\":%d,\"CF10\":%d,\"PM1\":%d,\"PM2.5\":%d,\"PM10\":%d,\"PB0.3\":%d,\"PB0.5\":%d,\"PB1\":%d,\"PB2.5\":%d,\"PB5\":%d,\"PB10\":%d}"),
     //    pms_data.pm10_standard, pms_data.pm25_standard, pms_data.pm100_standard,
     //    pms_data.pm10_env, pms_data.pm25_env, pms_data.pm100_env,
