@@ -19,70 +19,80 @@
 
   Inspired by https://github.com/SwapBap/WemosDustSensor/
 */
-#define VERSION "2.3"
+#define VERSION "2.4"
 /*--------------------------- Configuration ------------------------------*/
 // Configuration should be done in the included file:
 #include "config.h"
 
 /*--------------------------- Libraries ----------------------------------*/
-#include <SoftwareSerial.h>             // Allows PMS to avoid the USB serial port
-#include <Adafruit_GFX.h>               // For OLED
-#include <Adafruit_SSD1306.h>           // For OLED
-#include <ESP8266WiFi.h>                // ESP8266 WiFi driver
-#include <PubSubClient.h>               // Required for MQTT
-#include "PMS.h"                        // Particulate Matter Sensor driver
+#include <SoftwareSerial.h>           // Allows PMS to avoid the USB serial port
+#include <Adafruit_GFX.h>             // For OLED
+#include <Adafruit_SSD1306.h>         // For OLED
+#include <ESP8266WiFi.h>              // ESP8266 WiFi driver
+#include <PubSubClient.h>             // Required for MQTT
+#include "PMS.h"                      // Particulate Matter Sensor driver (embedded)
 
 /*--------------------------- Global Variables ---------------------------*/
 // Particulate matter sensor
-#define  SAMPLE_COUNT 50                // Number of samples to average
-#define  PMS_STATE_ASLEEP        0      // Low power mode, laser and fan off
-#define  PMS_STATE_WAKING_UP     1      // Laser and fan on, not ready yet
-#define  PMS_STATE_READY         2      // Warmed up, ready to give data
-uint8_t  g_pms_state           = PMS_STATE_WAKING_UP;
-uint32_t g_pms_state_start     = 0;     // Timestamp when PMS state last changed
-uint8_t  g_pms_readings_taken  = 0;     // 0/1: whether readings have been taken
-uint8_t  g_pm1_ae_value        = 0;     // Latest pm1.0 reading from sensor
-uint8_t  g_pm2p5_ae_value      = 0;     // Latest pm2.5 reading from sensor
-uint8_t  g_pm10_ae_value       = 0;     // Latest pm10.0 reading from sensor
-uint8_t  g_ring_buffer_index   = 0;     // Current position in the ring buffers
-uint16_t g_pm1_ring_buffer[SAMPLE_COUNT];   // Ring buffer for averaging pm1.0 values
-uint16_t g_pm2p5_ring_buffer[SAMPLE_COUNT]; // Ring buffer for averaging pm2.5 values
-uint16_t g_pm10_ring_buffer[SAMPLE_COUNT];  // Ring buffer for averaging pm10.0 values
-uint32_t g_pm1_average_value   = 0;     // Average pm1.0 reading from buffer
-uint32_t g_pm2p5_average_value = 0;     // Average pm2.5 reading from buffer
-uint32_t g_pm10_average_value  = 0;     // Average pm10.0 reading from buffer
+#define  SAMPLE_COUNT            30   // Number of samples to average
+#define  PMS_STATE_ASLEEP         0   // Low power mode, laser and fan off
+#define  PMS_STATE_WAKING_UP      1   // Laser and fan on, not ready yet
+#define  PMS_STATE_READY          2   // Warmed up, ready to give data
+uint8_t  g_pms_state            = PMS_STATE_WAKING_UP;
+uint32_t g_pms_state_start      = 0;  // Timestamp when PMS state last changed
+uint8_t  g_pms_readings_taken   = 0;  // 0/1: whether any readings have been taken
+uint8_t  g_pms_ppd_readings_taken = 0;  // 0/1: whether PPD readings have been taken
+
+uint16_t  g_pm1p0_sp_value      = 0;  // Standard Particle calibration pm1.0 reading
+uint16_t  g_pm2p5_sp_value      = 0;  // Standard Particle calibration pm2.5 reading
+uint16_t  g_pm10p0_sp_value     = 0;  // Standard Particle calibration pm10.0 reading
+
+uint16_t  g_pm1p0_ae_value      = 0;  // Atmospheric Environment pm1.0 reading
+uint16_t  g_pm2p5_ae_value      = 0;  // Atmospheric Environment pm2.5 reading
+uint16_t  g_pm10p0_ae_value     = 0;  // Atmospheric Environment pm10.0 reading
+
+uint16_t  g_pm0p3_ppd_value     = 0;  // Particles Per Deciliter pm0.3 reading
+uint32_t  g_pm0p5_ppd_value     = 0;  // Particles Per Deciliter pm0.5 reading
+uint16_t  g_pm1p0_ppd_value     = 0;  // Particles Per Deciliter pm1.0 reading
+uint16_t  g_pm2p5_ppd_value     = 0;  // Particles Per Deciliter pm2.5 reading
+uint16_t  g_pm5p0_ppd_value     = 0;  // Particles Per Deciliter pm5.0 reading
+uint16_t  g_pm10p0_ppd_value    = 0;  // Particles Per Deciliter pm10.0 reading
 
 // MQTT
-String g_device_id = "default";         // This is replaced later with a unique value
-char g_mqtt_message_buffer[150];        // General purpose buffer for MQTT messages
-char g_command_topic[50];               // MQTT topic for receiving commands
-#if REPORT_MQTT_TOPICS
-char g_pm1_mqtt_topic[50];              // MQTT topic for reporting averaged pm1.0 values
-char g_pm2p5_mqtt_topic[50];            // MQTT topic for reporting averaged pm2.5 values
-char g_pm10_mqtt_topic[50];             // MQTT topic for reporting averaged pm10.0 values
-char g_pm1_raw_mqtt_topic[50];          // MQTT topic for reporting raw pm1.0 values
-char g_pm2p5_raw_mqtt_topic[50];        // MQTT topic for reporting raw pm2.5 values
-char g_pm10_raw_mqtt_topic[50];         // MQTT topic for reporting raw pm10.0 values
+String g_device_id = "default";       // This is replaced later with a unique value
+char g_mqtt_message_buffer[150];      // General purpose buffer for MQTT messages
+char g_command_topic[50];             // MQTT topic for receiving commands
+#if REPORT_MQTT_SEPARATE
+char g_pm1p0_ae_mqtt_topic[50];       // MQTT topic for reporting pm1.0 AE value
+char g_pm2p5_ae_mqtt_topic[50];       // MQTT topic for reporting pm2.5 AE value
+char g_pm10p0_ae_mqtt_topic[50];      // MQTT topic for reporting pm10.0 AE value
+char g_pm0p3_ppd_mqtt_topic[50];      // MQTT topic for reporting pm0.3 PPD value
+char g_pm0p5_ppd_mqtt_topic[50];      // MQTT topic for reporting pm0.5 PPD value
+char g_pm1p0_ppd_mqtt_topic[50];      // MQTT topic for reporting pm1.0 PPD value
+char g_pm2p5_ppd_mqtt_topic[50];      // MQTT topic for reporting pm2.5 PPD value
+char g_pm5p0_ppd_mqtt_topic[50];      // MQTT topic for reporting pm5.0 PPD value
+char g_pm10p0_ppd_mqtt_topic[50];     // MQTT topic for reporting pm10.0 PPD value
 #endif
 #if REPORT_MQTT_JSON
-char g_mqtt_json_topic[50];             // MQTT topic for reporting all values in JSON
+char g_mqtt_json_topic[50];           // MQTT topic for reporting all values using JSON
 #endif
 
 // OLED Display
-#define DISPLAY_STATE_GRAMS   1         // Display PMS values in micrograms/m^3 on screen
-#define DISPLAY_STATE_INFO    2         // Display network status on screen
-#define NUM_OF_STATES 2                 // Number of possible states
+#define DISPLAY_STATE_GRAMS   1       // Display values in micrograms/m^3 on screen
+#define DISPLAY_STATE_PPD     2       // Display values in parts per deciliter on screen
+#define DISPLAY_STATE_INFO    3       // Display network status on screen
+#define NUM_OF_STATES 3               // Number of possible states
 uint8_t g_display_state = DISPLAY_STATE_GRAMS;  // Display values in micrograms/m^3 by default
 
 // Mode Button
-uint8_t  g_current_mode_button_state  =  1;   // Pin is pulled high by default
+uint8_t  g_current_mode_button_state  =  1;  // Pin is pulled high by default
 uint8_t  g_previous_mode_button_state =  1;
 uint32_t g_last_debounce_time         =  0;
 uint32_t g_debounce_delay             = 10;
 
 // Wifi
-#define WIFI_CONNECT_INTERVAL      500 // Wait 500ms intervals for wifi connection
-#define WIFI_CONNECT_MAX_ATTEMPTS   10 // Number of attempts/intervals to wait
+#define WIFI_CONNECT_INTERVAL      500   // Wait 500ms intervals for wifi connection
+#define WIFI_CONNECT_MAX_ATTEMPTS   10   // Number of attempts/intervals to wait
 
 /*--------------------------- Function Signatures ---------------------------*/
 void mqttCallback(char* topic, byte* payload, uint8_t length);
@@ -98,11 +108,11 @@ void renderScreen();
 SoftwareSerial pmsSerial(PMS_RX_PIN, PMS_TX_PIN); // Rx pin = GPIO2 (D4 on Wemos D1 Mini)
 
 // Particulate matter sensor
-PMS pms(pmsSerial);                    // Use the software serial port for the PMS
+PMS pms(pmsSerial);                      // Use the software serial port for the PMS
 PMS::DATA g_data;
 
 // OLED
-Adafruit_SSD1306 OLED(NULL);              // GPIO0 = OLED reset pin
+Adafruit_SSD1306 OLED(NULL);             // GPIO0 = OLED reset pin
 
 // MQTT
 WiFiClient esp_client;
@@ -137,7 +147,7 @@ void setup()
   OLED.setTextSize(1);
   OLED.setTextColor(WHITE);
   OLED.setCursor(0, 0);
-  OLED.println(" www.superhouse.tv");
+  OLED.println("www.superhouse.tv/aqs");
   OLED.println(" Particulate Matter");
   OLED.print(" Sensor v"); OLED.println(VERSION);
   OLED.print  (" Device id: ");
@@ -145,46 +155,55 @@ void setup()
   OLED.display();
 
   // Set up the topics for publishing sensor readings. By inserting the unique ID,
-  // the result is of the form: "device/d9616f/PM1" etc
-  sprintf(g_command_topic,        "cmnd/%x/COMMAND",  ESP.getChipId());  // For receiving commands
-#if REPORT_MQTT_TOPICS
-  sprintf(g_pm1_mqtt_topic,       "tele/%x/PM1",      ESP.getChipId());  // Data from PMS
-  sprintf(g_pm2p5_mqtt_topic,     "tele/%x/PM2P5",    ESP.getChipId());  // Data from PMS
-  sprintf(g_pm10_mqtt_topic,      "tele/%x/PM10",     ESP.getChipId());  // Data from PMS
-  sprintf(g_pm1_raw_mqtt_topic,   "tele/%x/PM1RAW",   ESP.getChipId());  // Data from PMS
-  sprintf(g_pm2p5_raw_mqtt_topic, "tele/%x/PM2P5RAW", ESP.getChipId());  // Data from PMS
-  sprintf(g_pm10_raw_mqtt_topic,  "tele/%x/PM10RAW",  ESP.getChipId());  // Data from PMS
+  // the result is of the form: "device/d9616f/PM1P0" etc
+  sprintf(g_command_topic,         "cmnd/%x/COMMAND",   ESP.getChipId());  // For receiving commands
+#if REPORT_MQTT_SEPARATE
+  sprintf(g_pm1p0_ae_mqtt_topic,   "tele/%x/AE1P0",     ESP.getChipId());  // Data from PMS
+  sprintf(g_pm2p5_ae_mqtt_topic,   "tele/%x/AE2P5",     ESP.getChipId());  // Data from PMS
+  sprintf(g_pm10p0_ae_mqtt_topic,  "tele/%x/AE10P0",    ESP.getChipId());  // Data from PMS
+  sprintf(g_pm0p3_ppd_mqtt_topic,  "tele/%x/PPD0P3",    ESP.getChipId());  // Data from PMS
+  sprintf(g_pm0p5_ppd_mqtt_topic,  "tele/%x/PPD0P5",    ESP.getChipId());  // Data from PMS
+  sprintf(g_pm1p0_ppd_mqtt_topic,  "tele/%x/PPD1P0",    ESP.getChipId());  // Data from PMS
+  sprintf(g_pm2p5_ppd_mqtt_topic,  "tele/%x/PPD2P5",    ESP.getChipId());  // Data from PMS
+  sprintf(g_pm5p0_ppd_mqtt_topic,  "tele/%x/PPD5P0",    ESP.getChipId());  // Data from PMS
+  sprintf(g_pm10p0_ppd_mqtt_topic, "tele/%x/PPD10P0",   ESP.getChipId());  // Data from PMS
 #endif
 #if REPORT_MQTT_JSON
-  sprintf(g_mqtt_json_topic,      "tele/%x/SENSOR",   ESP.getChipId());  // Data from PMS
+  sprintf(g_mqtt_json_topic,       "tele/%x/SENSOR",    ESP.getChipId());  // Data from PMS
 #endif
 
   // Report the MQTT topics to the serial console
   Serial.println(g_command_topic);          // For receiving messages
-#if REPORT_MQTT_TOPICS
+#if REPORT_MQTT_SEPARATE
   Serial.println("MQTT topics:");
-  Serial.println(g_pm1_mqtt_topic);         // From PMS
-  Serial.println(g_pm2p5_mqtt_topic);       // From PMS
-  Serial.println(g_pm10_mqtt_topic);        // From PMS
-  Serial.println(g_pm1_raw_mqtt_topic);     // From PMS
-  Serial.println(g_pm2p5_raw_mqtt_topic);   // From PMS
-  Serial.println(g_pm10_raw_mqtt_topic);    // From PMS
+  Serial.println(g_pm1p0_ae_mqtt_topic);    // From PMS
+  Serial.println(g_pm2p5_ae_mqtt_topic);    // From PMS
+  Serial.println(g_pm10p0_ae_mqtt_topic);   // From PMS
+  Serial.println(g_pm0p3_ppd_mqtt_topic);   // From PMS
+  Serial.println(g_pm0p5_ppd_mqtt_topic);   // From PMS
+  Serial.println(g_pm1p0_ppd_mqtt_topic);   // From PMS
+  Serial.println(g_pm2p5_ppd_mqtt_topic);   // From PMS
+  Serial.println(g_pm5p0_ppd_mqtt_topic);   // From PMS
+  Serial.println(g_pm10p0_ppd_mqtt_topic);  // From PMS
 #endif
 #if REPORT_MQTT_JSON
   Serial.println(g_mqtt_json_topic);        // From PMS
 #endif
 
   // Connect to WiFi
+  Serial.println("Connecting to WiFi");
   if (initWifi())
   {
-    OLED.println("Wifi [CONNECTED]");
+    OLED.println("WiFi [CONNECTED]");
+    Serial.println("WiFi connected");
   } else {
-    OLED.println("Wifi [FAILED]");
+    OLED.println("WiFi [FAILED]");
+    Serial.println("WiFi FAILED");
   }
   OLED.display();
   delay(100);
 
-  pinMode(MODE_BUTTON_PIN , INPUT_PULLUP); // Pin for switching screens button
+  pinMode(MODE_BUTTON_PIN, INPUT_PULLUP); // Pin for screen mode button
 
   /* Set up the MQTT client */
   client.setServer(mqtt_broker, 1883);
@@ -208,11 +227,10 @@ void loop()
   checkModeButton();
   updatePmsReadings();
   renderScreen();
-  updateAverages();
 }
 
 /**
-  Render the correct screen based on the display state
+  Render the correct screen based on the display mode
 */
 void renderScreen()
 {
@@ -227,29 +245,54 @@ void renderScreen()
 
       if (1 == g_pms_readings_taken)
       {
-        OLED.println("   Particles ug/m^3");
+        OLED.println("  Particles ug/m^3");
 
-        OLED.print(" PM  1.0: ");
-        OLED.print(g_data.PM_AE_UG_1_0);
-        OLED.print("  ");
-        OLED.print(g_data.PM_SP_UG_1_0);
-        OLED.print("  ");
-        OLED.println(g_data.PM_TOTALPARTICLES_1_0);
+        OLED.print("     PM  1.0: ");
+        OLED.print(g_pm1p0_ae_value);
+        OLED.println();
 
-        OLED.print(" PM  2.5: ");
-        OLED.print(g_data.PM_AE_UG_2_5);
-        OLED.print("  ");
-        OLED.print(g_data.PM_SP_UG_2_5);
-        OLED.print("  ");
-        OLED.println(g_data.PM_TOTALPARTICLES_2_5);
+        OLED.print("     PM  2.5: ");
+        OLED.print(g_pm2p5_ae_value);
+        OLED.println();
 
-        OLED.print(" PM 10.0: ");
-        OLED.print(g_data.PM_AE_UG_10_0);
-        OLED.print("  ");
-        OLED.print(g_data.PM_SP_UG_10_0);
-        OLED.print("  ");
-        OLED.println(g_data.PM_TOTALPARTICLES_10_0);
+        OLED.print("     PM 10.0: ");
+        OLED.print(g_pm10p0_ae_value);
+        OLED.println();
       } else {
+        OLED.println("  Particles ug/m^3");
+        OLED.println("  ----------------");
+        OLED.println(" Preparing sensor and");
+        OLED.println("   waiting for data");
+      }
+      break;
+
+    case DISPLAY_STATE_PPD:
+      OLED.setTextWrap(false);
+
+      if (1 == g_pms_readings_taken)
+      {
+        OLED.println("Particles / Deciliter");
+
+        OLED.print(" 0.3: ");
+        OLED.print(g_pm0p3_ppd_value);
+        OLED.setCursor(64, 8);
+        OLED.print("0.5:  ");
+        OLED.println(g_pm0p5_ppd_value);
+
+        OLED.print(" 1.0: ");
+        OLED.print(g_pm1p0_ppd_value);
+        OLED.setCursor(64, 16);
+        OLED.print("2.5:  ");
+        OLED.println(g_pm2p5_ppd_value);
+
+        OLED.print(" 5.0: ");
+        OLED.print(g_pm5p0_ppd_value);
+        OLED.setCursor(64, 24);
+        OLED.print("10.0: ");
+        OLED.println(g_pm10p0_ppd_value);
+      } else {
+        OLED.println("Particles / Deciliter");
+        OLED.println("---------------------");
         OLED.println(" Preparing sensor and");
         OLED.println("   waiting for data");
       }
@@ -272,8 +315,8 @@ void renderScreen()
       } else {
         OLED.print("FAILED");
       }
-      OLED.print("    ");
-      OLED.print((int)millis()/1000);
+      OLED.print("   Up:");
+      OLED.print((int)millis() / 1000);
       break;
 
     /* This fallback helps with debugging if you call a state that isn't defined */
@@ -324,14 +367,14 @@ void updatePmsReadings()
 {
   uint32_t time_now = millis();
 
-  // Check if we've been in the asleep state for long enough
+  // Check if we've been in the sleep state for long enough
   if (PMS_STATE_ASLEEP == g_pms_state)
   {
     if (time_now - g_pms_state_start
         >= ((g_pms_report_period * 1000) - (g_pms_warmup_period * 1000)))
     {
       // It's time to wake up the sensor
-      Serial.println("Waking up sensor");
+      //Serial.println("Waking up sensor");
       pms.wakeUp();
       g_pms_state_start = time_now;
       g_pms_state = PMS_STATE_WAKING_UP;
@@ -349,161 +392,207 @@ void updatePmsReadings()
     }
   }
 
-  // Check if we're ready to read from the sensor
+  // Put the most recent values into globals for reference elsewhere
   if (PMS_STATE_READY == g_pms_state)
   {
-    Serial.println("Requesting data");
-    pms.requestRead();
-
+    //pms.requestRead();
     if (pms.readUntil(g_data))
     {
-      Serial.println("Got data");
-      g_pm1_ae_value   = g_data.PM_AE_UG_1_0;
-      g_pm2p5_ae_value = g_data.PM_AE_UG_2_5;
-      g_pm10_ae_value  = g_data.PM_AE_UG_10_0;
+      g_pm1p0_sp_value   = g_data.PM_SP_UG_1_0;
+      g_pm2p5_sp_value   = g_data.PM_SP_UG_2_5;
+      g_pm10p0_sp_value  = g_data.PM_SP_UG_10_0;
 
-      g_pm1_ring_buffer[g_ring_buffer_index]   = g_pm1_ae_value;
-      g_pm2p5_ring_buffer[g_ring_buffer_index] = g_pm2p5_ae_value;
-      g_pm10_ring_buffer[g_ring_buffer_index]  = g_pm10_ae_value;
-      g_ring_buffer_index++;
-      if (g_ring_buffer_index > SAMPLE_COUNT)
+      g_pm1p0_ae_value   = g_data.PM_AE_UG_1_0;
+      g_pm2p5_ae_value   = g_data.PM_AE_UG_2_5;
+      g_pm10p0_ae_value  = g_data.PM_AE_UG_10_0;
+
+      // This condition below should NOT be required, but currently I get all
+      // 0 values for the PPD results every second time. This check only updates
+      // the global values if there is a non-zero result for any of the values:
+      if (g_data.PM_TOTALPARTICLES_0_3 + g_data.PM_TOTALPARTICLES_0_5
+          + g_data.PM_TOTALPARTICLES_1_0 + g_data.PM_TOTALPARTICLES_2_5
+          + g_data.PM_TOTALPARTICLES_5_0 + g_data.PM_TOTALPARTICLES_10_0
+          != 0)
       {
-        g_ring_buffer_index = 0;
+        g_pm0p3_ppd_value  = g_data.PM_TOTALPARTICLES_0_3;
+        g_pm0p5_ppd_value  = g_data.PM_TOTALPARTICLES_0_5;
+        g_pm1p0_ppd_value  = g_data.PM_TOTALPARTICLES_1_0;
+        g_pm2p5_ppd_value  = g_data.PM_TOTALPARTICLES_2_5;
+        g_pm5p0_ppd_value  = g_data.PM_TOTALPARTICLES_5_0;
+        g_pm10p0_ppd_value = g_data.PM_TOTALPARTICLES_10_0;
+        g_pms_ppd_readings_taken = 1;
       }
-      //} else {
-      //  Serial.println("Failed");
+      pms.sleep();
+
+      // Report the new values
+      reportToMqtt();
+      reportToSerial();
+
+      g_pms_readings_taken = 1;
+      g_pms_state_start = time_now;
+      g_pms_state = PMS_STATE_ASLEEP;
     }
-    pms.sleep();
-
-    // Add these values to the ring buffer and update averages
-    updateAverages();
-
-    // Report the new values
-    reportToMqtt();
-    reportToSerial();
-
-    g_pms_readings_taken = 1;
-    g_pms_state_start = time_now;
-    g_pms_state = PMS_STATE_ASLEEP;
   }
 }
 
 /**
-  Calculates averages for the samples in the ring buffers and stores them
-  in global variables for reference by the reporting functions.
-*/
-void updateAverages()
-{
-  uint8_t i;
-  for (i = 0; i < SAMPLE_COUNT; i++)
-  {
-    g_pm1_average_value += g_pm1_ring_buffer[i];
-  }
-  g_pm1_average_value = (int)((g_pm1_average_value / SAMPLE_COUNT) + 0.5);
-
-  for (i = 0; i < SAMPLE_COUNT; i++)
-  {
-    g_pm2p5_average_value += g_pm2p5_ring_buffer[i];
-  }
-  g_pm2p5_average_value = (int)((g_pm2p5_average_value / SAMPLE_COUNT) + 0.5);
-
-  for (i = 0; i < SAMPLE_COUNT; i++)
-  {
-    g_pm10_average_value += g_pm10_ring_buffer[i];
-  }
-  g_pm10_average_value = (int)((g_pm10_average_value / SAMPLE_COUNT) + 0.5);
-}
-
-/**
-  Report the current values to MQTT
+  Report the latest values to MQTT
 */
 void reportToMqtt()
 {
   String message_string;
 
-#if REPORT_MQTT_TOPICS
-  /* Report averaged PM1 value */
-  message_string = String(g_pm1_average_value);
+#if REPORT_MQTT_SEPARATE
+  /* Report PM1.0 AE value */
+  message_string = String(g_pm1p0_ae_value);
   message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
-  client.publish(g_pm1_mqtt_topic, g_mqtt_message_buffer);
+  client.publish(g_pm1p0_ae_mqtt_topic, g_mqtt_message_buffer);
 
-  /* Report averaged PM2.5 value */
-  message_string = String(g_pm2p5_average_value);
-  message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
-  client.publish(g_pm2p5_mqtt_topic, g_mqtt_message_buffer);
-
-  /* Report averaged PM10 value */
-  message_string = String(g_pm10_average_value);
-  message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
-  client.publish(g_pm10_mqtt_topic, g_mqtt_message_buffer);
-
-  /* Report raw PM1 value for comparison with averaged value */
-  message_string = String(g_pm1_ae_value);
-  message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
-  client.publish(g_pm1_raw_mqtt_topic, g_mqtt_message_buffer);
-
-  /* Report raw PM2.5 value for comparison with averaged value */
+  /* Report PM2.5 AE value */
   message_string = String(g_pm2p5_ae_value);
   message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
-  client.publish(g_pm2p5_raw_mqtt_topic, g_mqtt_message_buffer);
+  client.publish(g_pm2p5_ae_mqtt_topic, g_mqtt_message_buffer);
 
-  /* Report raw PM10 value for comparison with averaged value */
-  message_string = String(g_pm10_ae_value);
+  /* Report PM10.0 AE value */
+  message_string = String(g_pm10p0_ae_value);
   message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
-  client.publish(g_pm10_raw_mqtt_topic, g_mqtt_message_buffer);
+  client.publish(g_pm10p0_ae_mqtt_topic, g_mqtt_message_buffer);
+
+  if (1 == g_pms_ppd_readings_taken)
+  {
+    /* Report PM0.3 PPD value */
+    message_string = String(g_pm0p3_ppd_value);
+    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    client.publish(g_pm0p3_ppd_mqtt_topic, g_mqtt_message_buffer);
+
+    /* Report PM0.5 PPD value */
+    message_string = String(g_pm0p5_ppd_value);
+    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    client.publish(g_pm0p5_ppd_mqtt_topic, g_mqtt_message_buffer);
+
+    /* Report PM1.0 PPD value */
+    message_string = String(g_pm1p0_ppd_value);
+    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    client.publish(g_pm1p0_ppd_mqtt_topic, g_mqtt_message_buffer);
+
+    /* Report PM2.5 PPD value */
+    message_string = String(g_pm2p5_ppd_value);
+    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    client.publish(g_pm2p5_ppd_mqtt_topic, g_mqtt_message_buffer);
+
+    /* Report PM5.0 PPD value */
+    message_string = String(g_pm5p0_ppd_value);
+    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    client.publish(g_pm5p0_ppd_mqtt_topic, g_mqtt_message_buffer);
+
+    /* Report PM10.0 PPD value */
+    message_string = String(g_pm10p0_ppd_value);
+    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    client.publish(g_pm10p0_ppd_mqtt_topic, g_mqtt_message_buffer);
+  }
 #endif
 #if REPORT_MQTT_JSON
   /* Report all values combined into one JSON message */
-  //message_string = String(g_pm10_ae_value);
-  //message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
-  //client.publish(g_mqtt_json_topic, g_mqtt_message_buffer);
+  // Note: The PubSubClient library limits MQTT message size to 128 bytes, which is
+  // set inside the library as MQTT_MAX_PACKET_SIZE. This prevents us reporting all
+  // the values as a single JSON message, unless the library is edited. See:
+  //  https://github.com/knolleary/pubsubclient/issues/110
+  // The library has a method for sending large messages. Perhaps modify to use
+  // this technique:
+  //  https://github.com/knolleary/pubsubclient/blob/master/examples/mqtt_large_message/mqtt_large_message.ino
+
+  // This is an example message generated by Tasmota, to match the format:
   // {"Time":"2020-02-27T03:27:22","PMS5003":{"CF1":0,"CF2.5":1,"CF10":1,"PM1":0,"PM2.5":1,"PM10":1,"PB0.3":0,"PB0.5":0,"PB1":0,"PB2.5":0,"PB5":0,"PB10":0}}
-  sprintf(g_mqtt_message_buffer,  "{\"PMS5003\":{\"CF1\":0,\"CF2.5\":0,\"CF10\":0,\"PM1\":%i,\"PM2.5\":%i,\"PM10\":%i,\"PB0.3\":0,\"PB0.5\":0,\"PB1\":0,\"PB2.5\":0,\"PB5\":0,\"PB10\":0}}",
-          g_pm1_ae_value, g_pm2p5_ae_value, g_pm10_ae_value);
-  client.publish(g_mqtt_json_topic, g_mqtt_message_buffer);
+  // This is the source code from Tasmota:
   //ResponseAppend_P(PSTR(",\"PMS5003\":{\"CF1\":%d,\"CF2.5\":%d,\"CF10\":%d,\"PM1\":%d,\"PM2.5\":%d,\"PM10\":%d,\"PB0.3\":%d,\"PB0.5\":%d,\"PB1\":%d,\"PB2.5\":%d,\"PB5\":%d,\"PB10\":%d}"),
   //    pms_g_data.pm10_standard, pms_data.pm25_standard, pms_data.pm100_standard,
   //    pms_data.pm10_env, pms_data.pm25_env, pms_data.pm100_env,
   //    pms_data.particles_03um, pms_data.particles_05um, pms_data.particles_10um, pms_data.particles_25um, pms_data.particles_50um, pms_data.particles_100um);
+
+  // This is the full message that I want to send, but it exceeds the message size limit:
+  if (1 == g_pms_ppd_readings_taken)
+  {
+    sprintf(g_mqtt_message_buffer,  "{\"PMS5003\":{\"CF1\":%i,\"CF1\":%i,\"CF1\":%i,\"PM1\":%i,\"PM2.5\":%i,\"PM10\":%i,\"PB0.3\":%i,\"PB0.5\":%i,\"PB1\":%i,\"PB2.5\":%i,\"PB5\":%i,\"PB10\":%i}}",
+            g_pm1p0_sp_value, g_pm2p5_sp_value, g_pm10p0_sp_value,
+            g_pm1p0_ae_value, g_pm2p5_ae_value, g_pm10p0_ae_value,
+            g_pm0p3_ppd_value, g_pm0p3_ppd_value, g_pm1p0_ppd_value,
+            g_pm2p5_ppd_value, g_pm5p0_ppd_value, g_pm10p0_ppd_value);
+  } else {
+    sprintf(g_mqtt_message_buffer,  "{\"PMS5003\":{\"CF1\":%i,\"CF1\":%i,\"CF1\":%i,\"PM1\":%i,\"PM2.5\":%i,\"PM10\":%i}}",
+            g_pm1p0_sp_value, g_pm2p5_sp_value, g_pm10p0_sp_value,
+            g_pm1p0_ae_value, g_pm2p5_ae_value, g_pm10p0_ae_value);
+  }
+  
+  // Reduced message to fit within the size limit:
+  if (1 == g_pms_ppd_readings_taken)
+  {
+    sprintf(g_mqtt_message_buffer,  "{\"PMS5003\":{\"PM1\":%i,\"PM2.5\":%i,\"PM10\":%i,\"PB0.3\":%i,\"PB0.5\":%i,\"PB1\":%i,\"PB2.5\":%i,\"PB5\":%i,\"PB10\":%i}}",
+            g_pm1p0_ae_value, g_pm2p5_ae_value, g_pm10p0_ae_value,
+            g_pm0p3_ppd_value, g_pm0p3_ppd_value, g_pm1p0_ppd_value,
+            g_pm2p5_ppd_value, g_pm5p0_ppd_value, g_pm10p0_ppd_value);
+  } else {
+    sprintf(g_mqtt_message_buffer,  "{\"PMS5003\":{\"PM1\":%i,\"PM2.5\":%i,\"PM10\":%i}}",
+            g_pm1p0_ae_value, g_pm2p5_ae_value, g_pm10p0_ae_value);
+  }
+
+  client.publish(g_mqtt_json_topic, g_mqtt_message_buffer);
 #endif
 }
 
 /**
-  Report the current values to the serial console
+  Report the latest values to the serial console
 */
 void reportToSerial()
 {
   String message_string;
 
-  /* Report averaged PM1 value */
-  message_string = String(g_pm1_average_value);
-  Serial.print("PM1_AVERAGE:");
+  /* Report PM1.0 AE value */
+  message_string = String(g_pm1p0_ae_value);
+  Serial.print("PM1.0_AE:");
   Serial.println(message_string);
 
-  /* Report averaged PM2.5 value */
-  message_string = String(g_pm2p5_average_value);
-  Serial.print("PM2P5_AVERAGE:");
-  Serial.println(message_string);
-
-  /* Report averaged PM10 value */
-  message_string = String(g_pm10_average_value);
-  Serial.print("PM10_AVERAGE:");
-  Serial.println(message_string);
-
-  /* Report raw PM1 value for comparison with averaged value */
-  message_string = String(g_pm1_ae_value);
-  Serial.print("PM1_LATEST:");
-  Serial.println(message_string);
-
-  /* Report raw PM2.5 value for comparison with averaged value */
+  /* Report PM2.5 AE value */
   message_string = String(g_pm2p5_ae_value);
-  Serial.print("PM2P5_LATEST:");
+  Serial.print("PM2.5_AE:");
   Serial.println(message_string);
 
-  /* Report raw PM10 value for comparison with averaged value */
-  message_string = String(g_pm10_ae_value);
-  Serial.print("PM10_LATEST:");
+  /* Report PM10.0 AE value */
+  message_string = String(g_pm10p0_ae_value);
+  Serial.print("PM10.0_AE:");
   Serial.println(message_string);
+
+  if (1 == g_pms_ppd_readings_taken)
+  {
+    /* Report PM0.3 PPD value */
+    message_string = String(g_pm0p3_ppd_value);
+    Serial.print("PM0.3_PPD:");
+    Serial.println(message_string);
+
+    /* Report PM0.5 PPD value */
+    message_string = String(g_pm0p5_ppd_value);
+    Serial.print("PM0.5_PPD:");
+    Serial.println(message_string);
+
+    /* Report PM1.0 PPD value */
+    message_string = String(g_pm1p0_ppd_value);
+    Serial.print("PM1.0_PPD:");
+    Serial.println(message_string);
+
+    /* Report PM2.5 PPD value */
+    message_string = String(g_pm2p5_ppd_value);
+    Serial.print("PM2.5_PPD:");
+    Serial.println(message_string);
+
+    /* Report PM5.0 PPD value */
+    message_string = String(g_pm5p0_ppd_value);
+    Serial.print("PM5.0_PPD:");
+    Serial.println(message_string);
+
+    /* Report PM10.0 PPD value */
+    message_string = String(g_pm10p0_ppd_value);
+    Serial.print("PM10.0_PPD:");
+    Serial.println(message_string);
+  }
 }
 
 /**
