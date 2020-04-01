@@ -10,12 +10,12 @@
   I2C OLED display, with a mode button to change between display modes.
 
   External dependencies. Install using the Arduino library manager:
-     "Adafruit GFX Library" by Adafruit
-     "Adafruit SSD1306" by Adafruit
-     "PubSubClient" by Nick O'Leary
+   * "Adafruit GFX Library" by Adafruit
+   * "Adafruit SSD1306" by Adafruit
+   * "PubSubClient" by Nick O'Leary
 
   Bundled dependencies. No need to install separately:
-     "PMS Library" by Mariusz Kacki, forked by SwapBap
+   * "PMS Library" by Mariusz Kacki, forked by SwapBap
 
   Inspired by https://github.com/SwapBap/WemosDustSensor/
 */
@@ -34,14 +34,13 @@
 
 /*--------------------------- Global Variables ---------------------------*/
 // Particulate matter sensor
-#define  SAMPLE_COUNT            30   // Number of samples to average
-#define  PMS_STATE_ASLEEP         0   // Low power mode, laser and fan off
-#define  PMS_STATE_WAKING_UP      1   // Laser and fan on, not ready yet
-#define  PMS_STATE_READY          2   // Warmed up, ready to give data
-uint8_t  g_pms_state            = PMS_STATE_WAKING_UP;
-uint32_t g_pms_state_start      = 0;  // Timestamp when PMS state last changed
-uint8_t  g_pms_readings_taken   = 0;  // 0/1: whether any readings have been taken
-uint8_t  g_pms_ppd_readings_taken = 0;  // 0/1: whether PPD readings have been taken
+#define   PMS_STATE_ASLEEP        0   // Low power mode, laser and fan off
+#define   PMS_STATE_WAKING_UP     1   // Laser and fan on, not ready yet
+#define   PMS_STATE_READY         2   // Warmed up, ready to give data
+uint8_t   g_pms_state           = PMS_STATE_WAKING_UP;
+uint32_t  g_pms_state_start     = 0;  // Timestamp when PMS state last changed
+uint8_t   g_pms_readings_taken  = 0;  // 0/1: whether any readings have been taken
+uint8_t   g_pms_ppd_readings_taken = 0;  // 0/1: whether PPD readings have been taken
 
 uint16_t  g_pm1p0_sp_value      = 0;  // Standard Particle calibration pm1.0 reading
 uint16_t  g_pm2p5_sp_value      = 0;  // Standard Particle calibration pm2.5 reading
@@ -51,17 +50,17 @@ uint16_t  g_pm1p0_ae_value      = 0;  // Atmospheric Environment pm1.0 reading
 uint16_t  g_pm2p5_ae_value      = 0;  // Atmospheric Environment pm2.5 reading
 uint16_t  g_pm10p0_ae_value     = 0;  // Atmospheric Environment pm10.0 reading
 
-uint16_t  g_pm0p3_ppd_value     = 0;  // Particles Per Deciliter pm0.3 reading
+uint32_t  g_pm0p3_ppd_value     = 0;  // Particles Per Deciliter pm0.3 reading
 uint32_t  g_pm0p5_ppd_value     = 0;  // Particles Per Deciliter pm0.5 reading
-uint16_t  g_pm1p0_ppd_value     = 0;  // Particles Per Deciliter pm1.0 reading
-uint16_t  g_pm2p5_ppd_value     = 0;  // Particles Per Deciliter pm2.5 reading
-uint16_t  g_pm5p0_ppd_value     = 0;  // Particles Per Deciliter pm5.0 reading
-uint16_t  g_pm10p0_ppd_value    = 0;  // Particles Per Deciliter pm10.0 reading
+uint32_t  g_pm1p0_ppd_value     = 0;  // Particles Per Deciliter pm1.0 reading
+uint32_t  g_pm2p5_ppd_value     = 0;  // Particles Per Deciliter pm2.5 reading
+uint32_t  g_pm5p0_ppd_value     = 0;  // Particles Per Deciliter pm5.0 reading
+uint32_t  g_pm10p0_ppd_value    = 0;  // Particles Per Deciliter pm10.0 reading
 
 // MQTT
-String g_device_id = "default";       // This is replaced later with a unique value
 char g_mqtt_message_buffer[150];      // General purpose buffer for MQTT messages
 char g_command_topic[50];             // MQTT topic for receiving commands
+
 #if REPORT_MQTT_SEPARATE
 char g_pm1p0_ae_mqtt_topic[50];       // MQTT topic for reporting pm1.0 AE value
 char g_pm2p5_ae_mqtt_topic[50];       // MQTT topic for reporting pm2.5 AE value
@@ -88,11 +87,14 @@ uint8_t g_display_state = DISPLAY_STATE_GRAMS;  // Display values in micrograms/
 uint8_t  g_current_mode_button_state  =  1;  // Pin is pulled high by default
 uint8_t  g_previous_mode_button_state =  1;
 uint32_t g_last_debounce_time         =  0;
-uint32_t g_debounce_delay             = 10;
+uint32_t g_debounce_delay             = 50;
 
 // Wifi
 #define WIFI_CONNECT_INTERVAL      500   // Wait 500ms intervals for wifi connection
 #define WIFI_CONNECT_MAX_ATTEMPTS   10   // Number of attempts/intervals to wait
+
+// General
+uint32_t g_device_id;                    // Unique ID from ESP chip ID
 
 /*--------------------------- Function Signatures ---------------------------*/
 void mqttCallback(char* topic, byte* payload, uint8_t length);
@@ -136,9 +138,9 @@ void setup()
   pms.wakeUp();                     // Tell PMS to wake up (turn on fan and laser)
 
   // We need a unique device ID for our MQTT client connection
-  g_device_id = String(ESP.getChipId(), HEX);  // Get the unique ID of the ESP8266 chip in hex
+  g_device_id = ESP.getChipId();  // Get the unique ID of the ESP8266 chip
   Serial.print("Device ID: ");
-  Serial.println(g_device_id);
+  Serial.println(g_device_id, HEX);
 
   // Set up display
   OLED.begin();
@@ -544,54 +546,43 @@ void reportToMqtt()
 */
 void reportToSerial()
 {
-  String message_string;
-
   /* Report PM1.0 AE value */
-  message_string = String(g_pm1p0_ae_value);
-  Serial.print("PM1.0_AE:");
-  Serial.println(message_string);
+  Serial.print("PM1:");
+  Serial.println(String(g_pm1p0_ae_value));
 
   /* Report PM2.5 AE value */
-  message_string = String(g_pm2p5_ae_value);
-  Serial.print("PM2.5_AE:");
-  Serial.println(message_string);
+  Serial.print("PM2.5:");
+  Serial.println(String(g_pm2p5_ae_value));
 
   /* Report PM10.0 AE value */
-  message_string = String(g_pm10p0_ae_value);
-  Serial.print("PM10.0_AE:");
-  Serial.println(message_string);
+  Serial.print("PM10:");
+  Serial.println(String(g_pm10p0_ae_value));
 
   if (1 == g_pms_ppd_readings_taken)
   {
     /* Report PM0.3 PPD value */
-    message_string = String(g_pm0p3_ppd_value);
-    Serial.print("PM0.3_PPD:");
-    Serial.println(message_string);
+    Serial.print("PB0.3:");
+    Serial.println(String(g_pm0p3_ppd_value));
 
     /* Report PM0.5 PPD value */
-    message_string = String(g_pm0p5_ppd_value);
-    Serial.print("PM0.5_PPD:");
-    Serial.println(message_string);
+    Serial.print("PB0.5:");
+    Serial.println(String(g_pm0p5_ppd_value));
 
     /* Report PM1.0 PPD value */
-    message_string = String(g_pm1p0_ppd_value);
-    Serial.print("PM1.0_PPD:");
-    Serial.println(message_string);
+    Serial.print("PB1:");
+    Serial.println(String(g_pm1p0_ppd_value));
 
     /* Report PM2.5 PPD value */
-    message_string = String(g_pm2p5_ppd_value);
-    Serial.print("PM2.5_PPD:");
-    Serial.println(message_string);
+    Serial.print("PB2.5:");
+    Serial.println(String(g_pm2p5_ppd_value));
 
     /* Report PM5.0 PPD value */
-    message_string = String(g_pm5p0_ppd_value);
-    Serial.print("PM5.0_PPD:");
-    Serial.println(message_string);
+    Serial.print("PB5:");
+    Serial.println(String(g_pm5p0_ppd_value));
 
     /* Report PM10.0 PPD value */
-    message_string = String(g_pm10p0_ppd_value);
-    Serial.print("PM10.0_PPD:");
-    Serial.println(message_string);
+    Serial.print("PB10:");
+    Serial.println(String(g_pm10p0_ppd_value));
   }
 }
 
@@ -649,7 +640,7 @@ void reconnectMqtt() {
       //Serial.println("connected");
       // Once connected, publish an announcement
       sprintf(g_mqtt_message_buffer, "Device %s starting up", mqtt_client_id);
-      client.publish(statusTopic, g_mqtt_message_buffer);
+      client.publish(status_topic, g_mqtt_message_buffer);
       // Resubscribe
       //client.subscribe(g_command_topic);
     } else {
