@@ -3,15 +3,15 @@
 const char* ssid                  = "YOUR SSID";     // Your WiFi SSID
 const char* password              = "YOUR PASS";     // Your WiFi password
 
-/* Particulate Matter Sensor */
-uint32_t    g_pms_warmup_period   =  30;             // Seconds to warm up PMS before reading
-uint32_t    g_pms_report_period   = 120;             // Seconds between reports
-
 /* MQTT */
 const char* mqtt_broker           = "192.168.1.111"; // IP address of your MQTT broker
 #define     REPORT_MQTT_SEPARATE  true               // Report each value to its own topic
 #define     REPORT_MQTT_JSON      true               // Report all values in a JSON message
-const char* statusTopic           = "events";        // MQTT topic to report startup
+const char* status_topic          = "events";        // MQTT topic to report startup
+
+/* Particulate Matter Sensor */
+uint32_t    g_pms_warmup_period   =  30;             // Seconds to warm up PMS before reading
+uint32_t    g_pms_report_period   = 120;             // Seconds between reports
 
 /* Serial */
 #define     SERIAL_BAUD_RATE    115200               // Speed for USB serial console
