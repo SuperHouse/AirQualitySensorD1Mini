@@ -34,8 +34,9 @@ structure used by Tasmota, at a topic similar to:
  * tele/d9616f/SENSOR
 
 If you install the OLED and the mode button, you can use the button to
-toggle the display between different screens. The default screen shows the
-most recent PMS values (updated multiple times per second) and the second
+toggle the display between different screens. The first screen shows the
+most recent readings in micrograms per cubic meter. The second screen
+shows the most recent readings in particles per deciliter. The third
 screen shows network information including the MQTT ID, IP address, WiFi
 SSID, WiFi connection status, and uptime.
 
