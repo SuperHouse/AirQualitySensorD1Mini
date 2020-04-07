@@ -1,5 +1,5 @@
-Particulate Matter Sensor firmware
-==================================
+Air Quality Sensor firmware for D1 Mini
+========================================
 
 Read from a Plantower PMS5003 particulate matter sensor using a Wemos D1
 Mini (or other ESP8266-based board) and report the values to an MQTT
@@ -78,6 +78,6 @@ To do
 Credits
 -------
 
-Written by Jonathan Oxer for www.superhouse.tv  https://github.com/superhouse/PM25SensorD1Mini
+Written by Jonathan Oxer for www.superhouse.tv  https://github.com/superhouse/AirQualitySensorD1Mini
 
 Inspired by https://github.com/SwapBap/WemosDustSensor
