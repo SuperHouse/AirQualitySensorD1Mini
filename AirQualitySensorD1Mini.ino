@@ -2,7 +2,7 @@
   Particulate matter sensor firmware for D1 Mini (ESP8266) and PMS5003
 
   Written by Jonathan Oxer for www.superhouse.tv
-    https://github.com/superhouse/PM25SensorD1Mini
+    https://github.com/superhouse/AirQualitySensorD1Mini
 
   Read from a Plantower PMS5003 particulate matter sensor using a Wemos D1
   Mini (or other ESP8266-based board) and report the values to an MQTT
@@ -10,12 +10,12 @@
   I2C OLED display, with a mode button to change between display modes.
 
   External dependencies. Install using the Arduino library manager:
-   * "Adafruit GFX Library" by Adafruit
-   * "Adafruit SSD1306" by Adafruit
-   * "PubSubClient" by Nick O'Leary
+     "Adafruit GFX Library" by Adafruit
+     "Adafruit SSD1306" by Adafruit
+     "PubSubClient" by Nick O'Leary
 
   Bundled dependencies. No need to install separately:
-   * "PMS Library" by Mariusz Kacki, forked by SwapBap
+     "PMS Library" by Mariusz Kacki, forked by SwapBap
 
   Inspired by https://github.com/SwapBap/WemosDustSensor/
 */
@@ -39,8 +39,8 @@
 #define   PMS_STATE_READY         2   // Warmed up, ready to give data
 uint8_t   g_pms_state           = PMS_STATE_WAKING_UP;
 uint32_t  g_pms_state_start     = 0;  // Timestamp when PMS state last changed
-uint8_t   g_pms_readings_taken  = 0;  // 0/1: whether any readings have been taken
-uint8_t   g_pms_ppd_readings_taken = 0;  // 0/1: whether PPD readings have been taken
+uint8_t   g_pms_ae_readings_taken  = false;  // true/false: whether any readings have been taken
+uint8_t   g_pms_ppd_readings_taken = false;  // true/false: whether PPD readings have been taken
 
 uint16_t  g_pm1p0_sp_value      = 0;  // Standard Particle calibration pm1.0 reading
 uint16_t  g_pm2p5_sp_value      = 0;  // Standard Particle calibration pm2.5 reading
@@ -87,7 +87,7 @@ uint8_t g_display_state = DISPLAY_STATE_GRAMS;  // Display values in micrograms/
 uint8_t  g_current_mode_button_state  =  1;  // Pin is pulled high by default
 uint8_t  g_previous_mode_button_state =  1;
 uint32_t g_last_debounce_time         =  0;
-uint32_t g_debounce_delay             = 50;
+uint32_t g_debounce_delay             = 100;
 
 // Wifi
 #define WIFI_CONNECT_INTERVAL      500   // Wait 500ms intervals for wifi connection
@@ -232,115 +232,14 @@ void loop()
 }
 
 /**
-  Render the correct screen based on the display mode
-*/
-void renderScreen()
-{
-  OLED.clearDisplay();
-  OLED.setCursor(0, 0);
-
-  // Render our displays
-  switch (g_display_state)
-  {
-    case DISPLAY_STATE_GRAMS:
-      OLED.setTextWrap(false);
-
-      if (1 == g_pms_readings_taken)
-      {
-        OLED.println("  Particles ug/m^3");
-
-        OLED.print("     PM  1.0: ");
-        OLED.print(g_pm1p0_ae_value);
-        OLED.println();
-
-        OLED.print("     PM  2.5: ");
-        OLED.print(g_pm2p5_ae_value);
-        OLED.println();
-
-        OLED.print("     PM 10.0: ");
-        OLED.print(g_pm10p0_ae_value);
-        OLED.println();
-      } else {
-        OLED.println("  Particles ug/m^3");
-        OLED.println("  ----------------");
-        OLED.println(" Preparing sensor and");
-        OLED.println("   waiting for data");
-      }
-      break;
-
-    case DISPLAY_STATE_PPD:
-      OLED.setTextWrap(false);
-
-      if (1 == g_pms_readings_taken)
-      {
-        OLED.println("Particles / Deciliter");
-
-        OLED.print(" 0.3: ");
-        OLED.print(g_pm0p3_ppd_value);
-        OLED.setCursor(64, 8);
-        OLED.print("0.5:  ");
-        OLED.println(g_pm0p5_ppd_value);
-
-        OLED.print(" 1.0: ");
-        OLED.print(g_pm1p0_ppd_value);
-        OLED.setCursor(64, 16);
-        OLED.print("2.5:  ");
-        OLED.println(g_pm2p5_ppd_value);
-
-        OLED.print(" 5.0: ");
-        OLED.print(g_pm5p0_ppd_value);
-        OLED.setCursor(64, 24);
-        OLED.print("10.0: ");
-        OLED.println(g_pm10p0_ppd_value);
-      } else {
-        OLED.println("Particles / Deciliter");
-        OLED.println("---------------------");
-        OLED.println(" Preparing sensor and");
-        OLED.println("   waiting for data");
-      }
-      break;
-
-    case DISPLAY_STATE_INFO:
-      OLED.print("IP:   ");
-      OLED.println(WiFi.localIP());
-      char mqtt_client_id[20];
-      sprintf(mqtt_client_id, "esp8266-%x", ESP.getChipId());
-      OLED.setTextWrap(false);
-      OLED.print("ID:   ");
-      OLED.println(mqtt_client_id);
-      OLED.print("SSID: ");
-      OLED.println(ssid);
-      OLED.print("WiFi: ");
-      if (WiFi.status() == WL_CONNECTED)
-      {
-        OLED.print("OK");
-      } else {
-        OLED.print("FAILED");
-      }
-      OLED.print("   Up:");
-      OLED.print((int)millis() / 1000);
-      break;
-
-    /* This fallback helps with debugging if you call a state that isn't defined */
-    default:
-      OLED.println("Unknown state:");
-      OLED.println(g_display_state);
-      break;
-  }
-
-  OLED.display();
-}
-
-/**
   Read the display mode button and switch the display mode if necessary
 */
 void checkModeButton()
 {
-  g_previous_mode_button_state = g_current_mode_button_state;
   g_current_mode_button_state = digitalRead(MODE_BUTTON_PIN);
 
   // Check if button is now pressed and it was previously unpressed
-  if (g_current_mode_button_state == LOW && g_previous_mode_button_state == HIGH)
+  if (HIGH == g_previous_mode_button_state && LOW == g_current_mode_button_state)
   {
     // We haven't waited long enough so ignore this press
     if (millis() - g_last_debounce_time <= g_debounce_delay)
@@ -360,6 +259,8 @@ void checkModeButton()
       return;
     }
   }
+
+  g_previous_mode_button_state = g_current_mode_button_state;
 }
 
 /**
@@ -408,6 +309,8 @@ void updatePmsReadings()
       g_pm2p5_ae_value   = g_data.PM_AE_UG_2_5;
       g_pm10p0_ae_value  = g_data.PM_AE_UG_10_0;
 
+      g_pms_ae_readings_taken = true;
+
       // This condition below should NOT be required, but currently I get all
       // 0 values for the PPD results every second time. This check only updates
       // the global values if there is a non-zero result for any of the values:
@@ -422,7 +325,7 @@ void updatePmsReadings()
         g_pm2p5_ppd_value  = g_data.PM_TOTALPARTICLES_2_5;
         g_pm5p0_ppd_value  = g_data.PM_TOTALPARTICLES_5_0;
         g_pm10p0_ppd_value = g_data.PM_TOTALPARTICLES_10_0;
-        g_pms_ppd_readings_taken = 1;
+        g_pms_ppd_readings_taken = true;
       }
       pms.sleep();
 
@@ -430,11 +333,107 @@ void updatePmsReadings()
       reportToMqtt();
       reportToSerial();
 
-      g_pms_readings_taken = 1;
       g_pms_state_start = time_now;
       g_pms_state = PMS_STATE_ASLEEP;
     }
   }
+}
+
+/**
+  Render the correct screen based on the display mode
+*/
+void renderScreen()
+{
+  OLED.clearDisplay();
+  OLED.setCursor(0, 0);
+
+  // Render our displays
+  switch (g_display_state)
+  {
+    case DISPLAY_STATE_GRAMS:
+      OLED.setTextWrap(false);
+
+      if (true == g_pms_ae_readings_taken)
+      {
+        OLED.println("  Particles ug/m^3");
+
+        OLED.print("     PM  1.0: ");
+        OLED.println(g_pm1p0_ae_value);
+
+        OLED.print("     PM  2.5: ");
+        OLED.println(g_pm2p5_ae_value);
+
+        OLED.print("     PM 10.0: ");
+        OLED.println(g_pm10p0_ae_value);
+      } else {
+        OLED.println("  Particles ug/m^3");
+        OLED.println("  ----------------");
+        OLED.println(" Preparing sensor and");
+        OLED.println("   waiting for data");
+      }
+      break;
+
+    case DISPLAY_STATE_PPD:
+      OLED.setTextWrap(false);
+
+      if (true == g_pms_ppd_readings_taken)
+      {
+        OLED.println("Particles / Deciliter");
+
+        OLED.print(" 0.3: ");
+        OLED.print(g_pm0p3_ppd_value);
+        OLED.setCursor(64, 8);
+        OLED.print("0.5:  ");
+        OLED.println(g_pm0p5_ppd_value);
+
+        OLED.print(" 1.0: ");
+        OLED.print(g_pm1p0_ppd_value);
+        OLED.setCursor(64, 16);
+        OLED.print("2.5:  ");
+        OLED.println(g_pm2p5_ppd_value);
+
+        OLED.print(" 5.0: ");
+        OLED.print(g_pm5p0_ppd_value);
+        OLED.setCursor(64, 24);
+        OLED.print("10.0: ");
+        OLED.println(g_pm10p0_ppd_value);
+      } else {
+        OLED.println("Particles / Deciliter");
+        OLED.println("---------------------");
+        OLED.println(" Preparing sensor and");
+        OLED.println("   waiting for data");
+      }
+      break;
+
+    case DISPLAY_STATE_INFO:
+      OLED.print("IP:   ");
+      OLED.println(WiFi.localIP());
+      char mqtt_client_id[20];
+      sprintf(mqtt_client_id, "esp8266-%x", g_device_id);
+      OLED.setTextWrap(false);
+      OLED.print("ID:   ");
+      OLED.println(mqtt_client_id);
+      OLED.print("SSID: ");
+      OLED.println(ssid);
+      OLED.print("WiFi: ");
+      if (WiFi.status() == WL_CONNECTED)
+      {
+        OLED.print("OK");
+      } else {
+        OLED.print("FAILED");
+      }
+      OLED.print("   Up:");
+      OLED.print((int)millis() / 1000);
+      break;
+
+    /* This fallback helps with debugging if you call a state that isn't defined */
+    default:
+      OLED.println("Unknown state:");
+      OLED.println(g_display_state);
+      break;
+  }
+
+  OLED.display();
 }
 
 /**
@@ -445,22 +444,25 @@ void reportToMqtt()
   String message_string;
 
 #if REPORT_MQTT_SEPARATE
-  /* Report PM1.0 AE value */
-  message_string = String(g_pm1p0_ae_value);
-  message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
-  client.publish(g_pm1p0_ae_mqtt_topic, g_mqtt_message_buffer);
+  if (true == g_pms_ae_readings_taken)
+  {
+    /* Report PM1.0 AE value */
+    message_string = String(g_pm1p0_ae_value);
+    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    client.publish(g_pm1p0_ae_mqtt_topic, g_mqtt_message_buffer);
 
-  /* Report PM2.5 AE value */
-  message_string = String(g_pm2p5_ae_value);
-  message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
-  client.publish(g_pm2p5_ae_mqtt_topic, g_mqtt_message_buffer);
+    /* Report PM2.5 AE value */
+    message_string = String(g_pm2p5_ae_value);
+    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    client.publish(g_pm2p5_ae_mqtt_topic, g_mqtt_message_buffer);
 
-  /* Report PM10.0 AE value */
-  message_string = String(g_pm10p0_ae_value);
-  message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
-  client.publish(g_pm10p0_ae_mqtt_topic, g_mqtt_message_buffer);
+    /* Report PM10.0 AE value */
+    message_string = String(g_pm10p0_ae_value);
+    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    client.publish(g_pm10p0_ae_mqtt_topic, g_mqtt_message_buffer);
+  }
 
-  if (1 == g_pms_ppd_readings_taken)
+  if (true == g_pms_ppd_readings_taken)
   {
     /* Report PM0.3 PPD value */
     message_string = String(g_pm0p3_ppd_value);
@@ -493,6 +495,7 @@ void reportToMqtt()
     client.publish(g_pm10p0_ppd_mqtt_topic, g_mqtt_message_buffer);
   }
 #endif
+
 #if REPORT_MQTT_JSON
   /* Report all values combined into one JSON message */
   // Note: The PubSubClient library limits MQTT message size to 128 bytes, which is
@@ -512,7 +515,7 @@ void reportToMqtt()
   //    pms_data.particles_03um, pms_data.particles_05um, pms_data.particles_10um, pms_data.particles_25um, pms_data.particles_50um, pms_data.particles_100um);
 
   // This is the full message that I want to send, but it exceeds the message size limit:
-  if (1 == g_pms_ppd_readings_taken)
+  if (true == g_pms_ppd_readings_taken)
   {
     sprintf(g_mqtt_message_buffer,  "{\"PMS5003\":{\"CF1\":%i,\"CF1\":%i,\"CF1\":%i,\"PM1\":%i,\"PM2.5\":%i,\"PM10\":%i,\"PB0.3\":%i,\"PB0.5\":%i,\"PB1\":%i,\"PB2.5\":%i,\"PB5\":%i,\"PB10\":%i}}",
             g_pm1p0_sp_value, g_pm2p5_sp_value, g_pm10p0_sp_value,
@@ -524,9 +527,9 @@ void reportToMqtt()
             g_pm1p0_sp_value, g_pm2p5_sp_value, g_pm10p0_sp_value,
             g_pm1p0_ae_value, g_pm2p5_ae_value, g_pm10p0_ae_value);
   }
-  
+
   // Reduced message to fit within the size limit:
-  if (1 == g_pms_ppd_readings_taken)
+  if (true == g_pms_ppd_readings_taken)
   {
     sprintf(g_mqtt_message_buffer,  "{\"PMS5003\":{\"PM1\":%i,\"PM2.5\":%i,\"PM10\":%i,\"PB0.3\":%i,\"PB0.5\":%i,\"PB1\":%i,\"PB2.5\":%i,\"PB5\":%i,\"PB10\":%i}}",
             g_pm1p0_ae_value, g_pm2p5_ae_value, g_pm10p0_ae_value,
@@ -546,19 +549,22 @@ void reportToMqtt()
 */
 void reportToSerial()
 {
-  /* Report PM1.0 AE value */
-  Serial.print("PM1:");
-  Serial.println(String(g_pm1p0_ae_value));
+  if (true == g_pms_ppd_readings_taken)
+  {
+    /* Report PM1.0 AE value */
+    Serial.print("PM1:");
+    Serial.println(String(g_pm1p0_ae_value));
 
-  /* Report PM2.5 AE value */
-  Serial.print("PM2.5:");
-  Serial.println(String(g_pm2p5_ae_value));
+    /* Report PM2.5 AE value */
+    Serial.print("PM2.5:");
+    Serial.println(String(g_pm2p5_ae_value));
 
-  /* Report PM10.0 AE value */
-  Serial.print("PM10:");
-  Serial.println(String(g_pm10p0_ae_value));
+    /* Report PM10.0 AE value */
+    Serial.print("PM10:");
+    Serial.println(String(g_pm10p0_ae_value));
+  }
 
-  if (1 == g_pms_ppd_readings_taken)
+  if (true == g_pms_ppd_readings_taken)
   {
     /* Report PM0.3 PPD value */
     Serial.print("PB0.3:");
@@ -660,11 +666,13 @@ void reconnectMqtt() {
 */
 void mqttCallback(char* topic, byte* payload, uint8_t length)
 {
-  //Serial.print("Message arrived [");
-  //Serial.print(topic);
-  //Serial.print("] ");
-  //for (int i = 0; i < length; i++) {
-  //  Serial.print((char)payload[i]);
-  //}
-  //Serial.println();
+  /*
+    Serial.print("Message arrived [");
+    Serial.print(topic);
+    Serial.print("] ");
+    for (int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+    }
+    Serial.println();
+  */
 }
