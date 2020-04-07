@@ -21,22 +21,23 @@ topic while the device is booting to see what ID it reports.
 This ID is then used to generate topics for it to report its readings.
 The topics take the following form, with its unique ID substituted:
 
- * device/d9616f/pm1
- * device/d9616f/pm2p5
- * device/d9616f/pm10
- * device/d9616f/pm1raw
- * device/d9616f/pm2p5raw
- * device/d9616f/pm10raw
+ * tele/d9616f/PM1
+ * tele/d9616f/PM2.5
+ * tele/d9616f/PM10
+ * tele/d9616f/PPD0.3
+ * tele/d9616f/PPD0.5
+ * ...etc
 
-The main topics report a rolling average of the last 50 readings from the
-sensor. The "...raw" topics show the most recent reading. The PMS5003
-usually reports at 10 Hz, so these values can change rapidly.
+The values are also reported in a combined format as JSON, in the same
+structure used by Tasmota, at a topic similar to:
+
+ * tele/d9616f/SENSOR
 
 If you install the OLED and the mode button, you can use the button to
 toggle the display between different screens. The default screen shows the
 most recent PMS values (updated multiple times per second) and the second
 screen shows network information including the MQTT ID, IP address, WiFi
-SSID, and WiFi connection status.
+SSID, WiFi connection status, and uptime.
 
 Dependencies
 ------------
@@ -46,8 +47,11 @@ These dependencies can all be fulfilled in the Arduino IDE using
 
  * GFX library by Adafruit https://github.com/adafruit/Adafruit-GFX-Library
  * SSD1306 library by Adafruit https://github.com/adafruit/Adafruit_SSD1306
- * PMS library by Mariusz Kacki https://github.com/fu-hsi/pms
  * PubSubClient library by Nick O'Leary https://pubsubclient.knolleary.net
+
+It also uses a version of Mariusz Kacki's "PMS" library that was forked by
+SwapBap. You do not need to install this library separately, because it's
+included in the project.
 
 Connections
 -----------
@@ -69,11 +73,7 @@ For 128x32 I2C OLED:
 To do
 -----
 
- * Refactor bulk code in loop() into separate functions.
- * Don't make display dependent on successful read from PMS. Still display
-     network info if possible, and an error message on grams screen.
- * Ignore all PMS values for 30 seconds after booting, to give the sensor
-     time to settle.
+ * Fix MQTT publishing to allow messages greater than 128 bytes
 
 Credits
 -------
