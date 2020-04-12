@@ -90,8 +90,8 @@ uint32_t g_last_debounce_time         =  0;
 uint32_t g_debounce_delay             = 100;
 
 // Wifi
-#define WIFI_CONNECT_INTERVAL      500   // Wait 500ms intervals for wifi connection
-#define WIFI_CONNECT_MAX_ATTEMPTS   10   // Number of attempts/intervals to wait
+#define WIFI_CONNECT_INTERVAL           500  // Wait 500ms intervals for wifi connection
+#define WIFI_CONNECT_MAX_ATTEMPTS        10  // Number of attempts/intervals to wait
 
 // General
 uint32_t g_device_id;                    // Unique ID from ESP chip ID
@@ -157,7 +157,7 @@ void setup()
   OLED.display();
 
   // Set up the topics for publishing sensor readings. By inserting the unique ID,
-  // the result is of the form: "device/d9616f/PM1P0" etc
+  // the result is of the form: "tele/d9616f/AE1P0" etc
   sprintf(g_command_topic,         "cmnd/%x/COMMAND",   ESP.getChipId());  // For receiving commands
 #if REPORT_MQTT_SEPARATE
   sprintf(g_pm1p0_ae_mqtt_topic,   "tele/%x/AE1P0",     ESP.getChipId());  // Data from PMS
@@ -299,7 +299,7 @@ void updatePmsReadings()
   if (PMS_STATE_READY == g_pms_state)
   {
     //pms.requestRead();
-    if (pms.readUntil(g_data))
+    if (pms.readUntil(g_data))  // Use a blocking road to make sure we get values
     {
       g_pm1p0_sp_value   = g_data.PM_SP_UG_1_0;
       g_pm2p5_sp_value   = g_data.PM_SP_UG_2_5;
