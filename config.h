@@ -22,3 +22,7 @@ uint32_t    g_pms_report_period   = 120;             // Seconds between reports
 #define     PMS_RX_PIN              D4               // Rx from PMS (== PMS Tx)
 #define     PMS_TX_PIN              D8               // Tx to PMS (== PMS Rx)
 #define     PMS_BAUD_RATE         9600               // PMS5003 uses 9600bps
+
+#define     SCREEN_WIDTH           128               // OLED display width (pixels)
+#define     SCREEN_HEIGHT           32               // OLED display height (pixels)
+#define     OLED_RESET              -1               // Reset pin (or -1 if sharing Arduino reset pin)

@@ -1,9 +1,6 @@
 /**
   Particulate matter sensor firmware for D1 Mini (ESP8266) and PMS5003
 
-  Written by Jonathan Oxer for www.superhouse.tv
-    https://github.com/superhouse/AirQualitySensorD1Mini
-
   Read from a Plantower PMS5003 particulate matter sensor using a Wemos D1
   Mini (or other ESP8266-based board) and report the values to an MQTT
   broker and to the serial console. Also optionally show them on a 128x32
@@ -17,14 +14,20 @@
   Bundled dependencies. No need to install separately:
      "PMS Library" by Mariusz Kacki, forked by SwapBap
 
+  Written by Jonathan Oxer for www.superhouse.tv
+    https://github.com/superhouse/AirQualitySensorD1Mini
+
   Inspired by https://github.com/SwapBap/WemosDustSensor/
+
+  Copyright 2020 SuperHouse Automation Pty Ltd www.superhouse.tv
 */
-#define VERSION "2.4"
+#define VERSION "2.5"
 /*--------------------------- Configuration ------------------------------*/
 // Configuration should be done in the included file:
 #include "config.h"
 
 /*--------------------------- Libraries ----------------------------------*/
+#include <Wire.h>                     // For I2C
 #include <SoftwareSerial.h>           // Allows PMS to avoid the USB serial port
 #include <Adafruit_GFX.h>             // For OLED
 #include <Adafruit_SSD1306.h>         // For OLED
@@ -96,7 +99,7 @@ uint32_t g_debounce_delay             = 100;
 // General
 uint32_t g_device_id;                    // Unique ID from ESP chip ID
 
-/*--------------------------- Function Signatures ---------------------------*/
+/*--------------------------- Function Signatures ------------------------*/
 void mqttCallback(char* topic, byte* payload, uint8_t length);
 void checkModeButton();
 bool initWifi();
@@ -105,7 +108,7 @@ void updatePmsReadings();
 void reportToMqtt();
 void renderScreen();
 
-/*--------------------------- Instantiate Global Objects --------------------*/
+/*--------------------------- Instantiate Global Objects -----------------*/
 // Software serial port
 SoftwareSerial pmsSerial(PMS_RX_PIN, PMS_TX_PIN); // Rx pin = GPIO2 (D4 on Wemos D1 Mini)
 
@@ -114,13 +117,13 @@ PMS pms(pmsSerial);                      // Use the software serial port for the
 PMS::DATA g_data;
 
 // OLED
-Adafruit_SSD1306 OLED(NULL);             // GPIO0 = OLED reset pin
+Adafruit_SSD1306 OLED(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // MQTT
 WiFiClient esp_client;
 PubSubClient client(esp_client);
 
-/*--------------------------- Program ---------------------------------------*/
+/*--------------------------- Program ------------------------------------*/
 /**
   Setup
 */
