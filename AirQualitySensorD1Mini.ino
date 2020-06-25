@@ -156,7 +156,7 @@ void setup()
   OLED.println(" Particulate Matter");
   OLED.print(" Sensor v"); OLED.println(VERSION);
   OLED.print  (" Device id: ");
-  OLED.println(g_device_id);
+  OLED.println(g_device_id, HEX);
   OLED.display();
 
   // Set up the topics for publishing sensor readings. By inserting the unique ID,
