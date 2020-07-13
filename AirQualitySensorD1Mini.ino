@@ -629,7 +629,7 @@ void reconnectMqtt() {
   {
     //Serial.print("Attempting MQTT connection...");
     // Attempt to connect
-    if (client.connect(mqtt_client_id))
+    if (client.connect(mqtt_client_id, mqtt_username, mqtt_password))
     {
       //Serial.println("connected");
       // Once connected, publish an announcement

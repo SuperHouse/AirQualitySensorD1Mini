@@ -5,6 +5,8 @@ const char* password              = "YOUR PASS";     // Your WiFi password
 
 /* MQTT */
 const char* mqtt_broker           = "192.168.1.111"; // IP address of your MQTT broker
+const char* mqtt_username         = "";              // Your MQTT username
+const char* mqtt_password         = "";              // Your MQTT password
 #define     REPORT_MQTT_SEPARATE  true               // Report each value to its own topic
 #define     REPORT_MQTT_JSON      true               // Report all values in a JSON message
 const char* status_topic          = "events";        // MQTT topic to report startup
