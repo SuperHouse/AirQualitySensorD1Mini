@@ -74,11 +74,12 @@ For 128x32 I2C OLED:
 To do
 -----
 
- * Fix MQTT publishing to allow messages greater than 128 bytes
+ * 
 
 Credits
 -------
 
-Written by Jonathan Oxer for www.superhouse.tv  https://github.com/superhouse/AirQualitySensorD1Mini
+Written by Jonathan Oxer for www.superhouse.tv  
+https://github.com/superhouse/AirQualitySensorD1Mini
 
 Inspired by https://github.com/SwapBap/WemosDustSensor
