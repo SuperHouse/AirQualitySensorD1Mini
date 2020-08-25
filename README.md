@@ -60,6 +60,7 @@ Connections
 For particulate matter sensor:
  * PMS5003 pin 1 (VCC) to D1 Mini "5V" pin
  * PMS5003 pin 2 (GND) to D1 Mini "GND" pin
+ * PMS5003 pin 4 (RX) to D1 Mini "D8" pin
  * PMS5003 pin 5 (TX) to D1 Mini "D4" pin
 
 For mode button:
