@@ -64,7 +64,7 @@ For particulate matter sensor:
  * PMS5003 pin 5 (TX) to D1 Mini "D4" pin
 
 For mode button:
- * Button connected between D1 Mini "D7" pin (GPIO13) and GND
+ * Button connected between D1 Mini "D3" pin (GPIO0) and GND
 
 For 128x32 I2C OLED:
  * OLED VCC to D1 Mini 3.3V
