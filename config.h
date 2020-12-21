@@ -4,7 +4,7 @@ const char* ssid                  = "YOUR SSID";     // Your WiFi SSID
 const char* password              = "YOUR PASS";     // Your WiFi password
 
 /* MQTT */
-const char* mqtt_broker           = "192.168.1.111"; // IP address of your MQTT broker
+const char* mqtt_broker           = "192.168.1.185"; // IP address of your MQTT broker
 const char* mqtt_username         = "";              // Your MQTT username
 const char* mqtt_password         = "";              // Your MQTT password
 #define     REPORT_MQTT_SEPARATE  true               // Report each value to its own topic

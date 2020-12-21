@@ -60,6 +60,9 @@ uint32_t  g_pm2p5_ppd_value     = 0;  // Particles Per Deciliter pm2.5 reading
 uint32_t  g_pm5p0_ppd_value     = 0;  // Particles Per Deciliter pm5.0 reading
 uint32_t  g_pm10p0_ppd_value    = 0;  // Particles Per Deciliter pm10.0 reading
 
+uint8_t   g_uk_aqi_value        = 0;  // Air Quality Index value using UK reporting system
+uint16_t  g_us_aqi_value        = 0;  // Air Quality Index value using US reporting system
+
 // MQTT
 char g_mqtt_message_buffer[255];      // General purpose buffer for MQTT messages
 char g_command_topic[50];             // MQTT topic for receiving commands
@@ -74,6 +77,8 @@ char g_pm1p0_ppd_mqtt_topic[50];      // MQTT topic for reporting pm1.0 PPD valu
 char g_pm2p5_ppd_mqtt_topic[50];      // MQTT topic for reporting pm2.5 PPD value
 char g_pm5p0_ppd_mqtt_topic[50];      // MQTT topic for reporting pm5.0 PPD value
 char g_pm10p0_ppd_mqtt_topic[50];     // MQTT topic for reporting pm10.0 PPD value
+char g_uk_aqi_mqtt_topic[50];         // MQTT topic for UK-format AQI value
+char g_us_aqi_mqtt_topic[50];         // MQTT topic for US-format AQI value
 #endif
 #if REPORT_MQTT_JSON
 char g_mqtt_json_topic[50];           // MQTT topic for reporting all values using JSON
@@ -107,6 +112,9 @@ void reconnectMqtt();
 void updatePmsReadings();
 void reportToMqtt();
 void renderScreen();
+
+/* -------------------------- Resources ----------------------------------*/
+#include "aqi.h"                         // Air Quality Index calculations
 
 /*--------------------------- Instantiate Global Objects -----------------*/
 // Software serial port
@@ -172,6 +180,8 @@ void setup()
   sprintf(g_pm2p5_ppd_mqtt_topic,  "tele/%x/PPD2P5",    ESP.getChipId());  // Data from PMS
   sprintf(g_pm5p0_ppd_mqtt_topic,  "tele/%x/PPD5P0",    ESP.getChipId());  // Data from PMS
   sprintf(g_pm10p0_ppd_mqtt_topic, "tele/%x/PPD10P0",   ESP.getChipId());  // Data from PMS
+  sprintf(g_uk_aqi_mqtt_topic,     "tele/%x/AQIUK",     ESP.getChipId());  // Calculated value
+  sprintf(g_us_aqi_mqtt_topic,     "tele/%x/AQIUS",     ESP.getChipId());  // Calculated value
 #endif
 #if REPORT_MQTT_JSON
   sprintf(g_mqtt_json_topic,       "tele/%x/SENSOR",    ESP.getChipId());  // Data from PMS
@@ -190,6 +200,8 @@ void setup()
   Serial.println(g_pm2p5_ppd_mqtt_topic);   // From PMS
   Serial.println(g_pm5p0_ppd_mqtt_topic);   // From PMS
   Serial.println(g_pm10p0_ppd_mqtt_topic);  // From PMS
+  Serial.println(g_uk_aqi_mqtt_topic);      // Calculated value
+  Serial.println(g_us_aqi_mqtt_topic);      // Calculated value
 #endif
 #if REPORT_MQTT_JSON
   Serial.println(g_mqtt_json_topic);        // From PMS
@@ -332,6 +344,9 @@ void updatePmsReadings()
         g_pms_ppd_readings_taken = true;
       }
       pms.sleep();
+
+      // Calculate AQI values for the various reporting standards
+      calculateUkAqi();
 
       // Report the new values
       reportToMqtt();
@@ -497,6 +512,11 @@ void reportToMqtt()
     message_string = String(g_pm10p0_ppd_value);
     message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
     client.publish(g_pm10p0_ppd_mqtt_topic, g_mqtt_message_buffer);
+
+    /* Report UK AQI value */
+    message_string = String(g_uk_aqi_value);
+    message_string.toCharArray(g_mqtt_message_buffer, message_string.length() + 1);
+    client.publish(g_uk_aqi_mqtt_topic, g_mqtt_message_buffer);
   }
 #endif
 
@@ -517,11 +537,12 @@ void reportToMqtt()
   // Format the message as JSON in the outgoing message buffer:
   if (true == g_pms_ppd_readings_taken)
   {
-    sprintf(g_mqtt_message_buffer,  "{\"PMS5003\":{\"CF1\":%i,\"CF1\":%i,\"CF1\":%i,\"PM1\":%i,\"PM2.5\":%i,\"PM10\":%i,\"PB0.3\":%i,\"PB0.5\":%i,\"PB1\":%i,\"PB2.5\":%i,\"PB5\":%i,\"PB10\":%i}}",
+    sprintf(g_mqtt_message_buffer,  "{\"PMS5003\":{\"CF1\":%i,\"CF1\":%i,\"CF1\":%i,\"PM1\":%i,\"PM2.5\":%i,\"PM10\":%i,\"PB0.3\":%i,\"PB0.5\":%i,\"PB1\":%i,\"PB2.5\":%i,\"PB5\":%i,\"PB10\":%i,\"UKAQI\":%i}}",
             g_pm1p0_sp_value, g_pm2p5_sp_value, g_pm10p0_sp_value,
             g_pm1p0_ae_value, g_pm2p5_ae_value, g_pm10p0_ae_value,
-            g_pm0p3_ppd_value, g_pm0p3_ppd_value, g_pm1p0_ppd_value,
-            g_pm2p5_ppd_value, g_pm5p0_ppd_value, g_pm10p0_ppd_value);
+            g_pm0p3_ppd_value, g_pm0p5_ppd_value, g_pm1p0_ppd_value,
+            g_pm2p5_ppd_value, g_pm5p0_ppd_value, g_pm10p0_ppd_value,
+            g_uk_aqi_value);
   } else {
     sprintf(g_mqtt_message_buffer,  "{\"PMS5003\":{\"CF1\":%i,\"CF1\":%i,\"CF1\":%i,\"PM1\":%i,\"PM2.5\":%i,\"PM10\":%i}}",
             g_pm1p0_sp_value, g_pm2p5_sp_value, g_pm10p0_sp_value,
@@ -537,7 +558,7 @@ void reportToMqtt()
 */
 void reportToSerial()
 {
-  if (true == g_pms_ppd_readings_taken)
+  if (true == g_pms_ae_readings_taken)
   {
     /* Report PM1.0 AE value */
     Serial.print("PM1:");
@@ -577,6 +598,10 @@ void reportToSerial()
     /* Report PM10.0 PPD value */
     Serial.print("PB10:");
     Serial.println(String(g_pm10p0_ppd_value));
+
+    /* Report UK AQI value */
+    Serial.print("UKAQI:");
+    Serial.println(String(g_uk_aqi_value));
   }
 }
 
