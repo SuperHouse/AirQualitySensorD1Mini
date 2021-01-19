@@ -428,7 +428,7 @@ void renderScreen()
       OLED.print("IP:   ");
       OLED.println(WiFi.localIP());
       char mqtt_client_id[20];
-      sprintf(mqtt_client_id, "esp8266-%x", g_device_id);
+      sprintf(mqtt_client_id, "esp8266%x", g_device_id);
       OLED.setTextWrap(false);
       OLED.print("ID:   ");
       OLED.println(mqtt_client_id);
