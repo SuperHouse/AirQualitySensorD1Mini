@@ -21,7 +21,7 @@
 
   Copyright 2020 SuperHouse Automation Pty Ltd www.superhouse.tv
 */
-#define VERSION "2.5"
+#define VERSION "2.6"
 /*--------------------------- Configuration ------------------------------*/
 // Configuration should be done in the included file:
 #include "config.h"
