@@ -537,14 +537,14 @@ void reportToMqtt()
   // Format the message as JSON in the outgoing message buffer:
   if (true == g_pms_ppd_readings_taken)
   {
-    sprintf(g_mqtt_message_buffer,  "{\"PMS5003\":{\"CF1\":%i,\"CF1\":%i,\"CF1\":%i,\"PM1\":%i,\"PM2.5\":%i,\"PM10\":%i,\"PB0.3\":%i,\"PB0.5\":%i,\"PB1\":%i,\"PB2.5\":%i,\"PB5\":%i,\"PB10\":%i,\"UKAQI\":%i}}",
+    sprintf(g_mqtt_message_buffer,  "{\"PMS5003\":{\"CF1\":%i,\"CF2.5\":%i,\"CF10\":%i,\"PM1\":%i,\"PM2.5\":%i,\"PM10\":%i,\"PB0.3\":%i,\"PB0.5\":%i,\"PB1\":%i,\"PB2.5\":%i,\"PB5\":%i,\"PB10\":%i,\"UKAQI\":%i}}",
             g_pm1p0_sp_value, g_pm2p5_sp_value, g_pm10p0_sp_value,
             g_pm1p0_ae_value, g_pm2p5_ae_value, g_pm10p0_ae_value,
             g_pm0p3_ppd_value, g_pm0p5_ppd_value, g_pm1p0_ppd_value,
             g_pm2p5_ppd_value, g_pm5p0_ppd_value, g_pm10p0_ppd_value,
             g_uk_aqi_value);
   } else {
-    sprintf(g_mqtt_message_buffer,  "{\"PMS5003\":{\"CF1\":%i,\"CF1\":%i,\"CF1\":%i,\"PM1\":%i,\"PM2.5\":%i,\"PM10\":%i}}",
+    sprintf(g_mqtt_message_buffer,  "{\"PMS5003\":{\"CF1\":%i,\"CF2.5\":%i,\"CF10\":%i,\"PM1\":%i,\"PM2.5\":%i,\"PM10\":%i}}",
             g_pm1p0_sp_value, g_pm2p5_sp_value, g_pm10p0_sp_value,
             g_pm1p0_ae_value, g_pm2p5_ae_value, g_pm10p0_ae_value);
   }
