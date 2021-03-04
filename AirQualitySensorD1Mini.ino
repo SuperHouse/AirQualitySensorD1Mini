@@ -211,14 +211,10 @@ void setup()
   Serial.println("Connecting to WiFi");
   if (initWifi())
   {
-    OLED.println("WiFi [CONNECTED]");
     Serial.println("WiFi connected");
   } else {
-    OLED.println("WiFi [FAILED]");
     Serial.println("WiFi FAILED");
   }
-  OLED.display();
-  delay(100);
 
   pinMode(MODE_BUTTON_PIN, INPUT_PULLUP); // Pin for screen mode button
 
@@ -239,8 +235,8 @@ void loop()
     {
       reconnectMqtt();
     }
+    client.loop();  // Process any outstanding MQTT messages
   }
-  client.loop();  // Process any outstanding MQTT messages
 
   checkModeButton();
   updatePmsReadings();
